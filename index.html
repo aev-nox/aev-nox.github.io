@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ghost E2EE Chat</title>
+    <style>
+        :root { 
+            --bg-color: #0f0f11; 
+            --chat-bg: #18181d; 
+            --panel-bg: #22222a;
+            --text-main: #f0f0f0; 
+            --text-muted: #8a8a93; 
+            --accent: #5e5ce6; 
+            --bubble-me: #5e5ce6; 
+            --bubble-peer: #2c2c35; 
+            --danger: #ff453a;
+            --online: #32d74b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            background-color: var(--bg-color); color: var(--text-main); 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif; 
+            font-size: 15px; /* Вернули комфортный размер шрифта */
+            display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden;
+        }
+        
+        /* Расширенный контейнер для ПК (600px) */
+        .app-container { 
+            width: 100%; max-width: 600px; height: 100vh; 
+            display: flex; flex-direction: column; background: var(--chat-bg); 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); position: relative;
+        }
+        @media (min-width: 620px) { 
+            .app-container { height: 92vh; max-height: 900px; border-radius: 16px; border: 1px solid #2c2c35; } 
+        }
+
+        .header { 
+            padding: 12px 18px; background: var(--panel-bg); 
+            display: flex; justify-content: space-between; align-items: center; 
+            border-bottom: 1px solid #2c2c35; z-index: 10;
+        }
+        .header-info { display: flex; flex-direction: column; gap: 3px; }
+        .header-title { font-weight: 600; font-size: 1.1em; display: flex; align-items: center; gap: 6px; }
+        .header-online { font-size: 0.85em; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; background: var(--online); border-radius: 50%; box-shadow: 0 0 8px rgba(50, 215, 75, 0.5); }
+        
+        .settings-btn { background: none; border: none; color: var(--text-muted); font-size: 1.3em; cursor: pointer; padding: 4px; transition: 0.2s; }
+        .settings-btn:hover { color: var(--text-main); }
+
+        .settings-panel {
+            position: absolute; top: 60px; right: 15px; background: #232329; border: 1px solid #33333d;
+            border-radius: 12px; padding: 12px; display: none; flex-direction: column; gap: 10px; z-index: 20;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.6); width: 220px;
+        }
+        .settings-panel.active { display: flex; }
+        .settings-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9em;}
+        select { background: #18181d; color: var(--text-main); border: 1px solid #33333d; padding: 6px; border-radius: 8px; outline: none; }
+        button.btn-danger { background: rgba(255, 69, 58, 0.1); color: var(--danger); border: 1px solid rgba(255, 69, 58, 0.3); cursor: pointer; width: 100%; font-weight: 600; padding: 8px; border-radius: 8px; transition: 0.2s;}
+        button.btn-danger:hover { background: rgba(255, 69, 58, 0.2); }
+
+        #log { 
+            flex: 1; overflow-y: auto; padding: 20px 15px; 
+            display: flex; flex-direction: column; gap: 8px; 
+            scroll-behavior: smooth;
+        }
+        
+        /* Стили сообщений с поддержкой многострочности */
+        .msg { 
+            max-width: 85%; padding: 8px 12px; border-radius: 14px; 
+            line-height: 1.4; font-size: 0.95em; position: relative;
+            white-space: pre-wrap; /* СОХРАНЯЕТ ПЕРЕНОСЫ СТРОК */
+            word-wrap: break-word;
+            display: flex; flex-direction: column;
+        }
+        .msg.system { align-self: center; background: transparent; color: var(--text-muted); font-size: 0.85em; text-align: center; margin: 8px 0; display: block; }
+        .msg.you { align-self: flex-end; background: var(--bubble-me); color: #fff; border-bottom-right-radius: 4px; }
+        .msg.peer { align-self: flex-start; background: var(--bubble-peer); color: var(--text-main); border-bottom-left-radius: 4px; }
+        
+        /* Время сообщения */
+        .msg-time {
+            font-size: 0.75em; align-self: flex-end; margin-top: 4px; margin-bottom: -2px;
+            opacity: 0.7; user-select: none;
+        }
+        .msg.peer .msg-time { color: var(--text-muted); }
+
+        .input-area { 
+            padding: 12px 16px; background: var(--panel-bg); 
+            border-top: 1px solid #2c2c35; display: flex; gap: 10px; align-items: flex-end;
+        }
+        
+        /* Умное поле ввода (Textarea) */
+        #input { 
+            flex: 1; background: #18181d; border: 1px solid #2c2c35; color: var(--text-main); 
+            padding: 12px 16px; border-radius: 20px; font-size: 1em; outline: none; transition: 0.2s;
+            resize: none; min-height: 46px; max-height: 150px; overflow-y: auto; font-family: inherit; line-height: 1.4;
+        }
+        #input:focus { border-color: var(--accent); background: #1c1c22; }
+        #input:disabled { opacity: 0.5; }
+        
+        .send-btn { 
+            background: var(--accent); border: none; border-radius: 50%; width: 46px; height: 46px; 
+            display: flex; justify-content: center; align-items: center; color: white; cursor: pointer; flex-shrink: 0; transition: 0.2s;
+        }
+        .send-btn:disabled { background: #2c2c35; color: var(--text-muted); cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div class="header">
+            <div class="header-info">
+                <div class="header-title">👻 Ghost Chat</div>
+                <div class="header-online"><span class="status-dot"></span> <span id="online-count">1 в комнате</span></div>
+            </div>
+            <button class="settings-btn" id="btn-settings">⚙️</button>
+        </div>
+
+        <div class="settings-panel" id="settings-panel">
+            <div class="settings-row">
+                <span>Очистка:</span>
+                <select id="ttl-select">
+                    <option value="0" selected>Никогда</option>
+                    <option value="3600">1 час</option>
+                    <option value="86400">24 часа</option>
+                    <option value="604800">7 дней</option>
+                </select>
+            </div>
+            <button class="btn-danger" id="btn-clear">🗑 Очистить сейчас</button>
+        </div>
+
+        <div id="log"></div>
+        
+        <div class="input-area">
+            <textarea id="input" rows="1" placeholder="Сообщение..." disabled></textarea>
+            <button class="send-btn" id="btn-send" disabled>➤</button>
+        </div>
+    </div>
+
+    <script>
+        const UPSTASH_URL = "https://fine-lark-176654.upstash.io"; 
+        const UPSTASH_TOKEN = "gwAAAAAAArIOAAIJQHAxY2hhdF91c2VyKjrag5sLbqnSVK-WR01Esu152bwOPiM5oFjD2iNbHdmsbdfPOwuuwDXLEklHUWJJj7H2POQnd-SBC76cS2b7YQ"; 
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room') || 'ghost-room';
+        let roomPassword = window.location.hash.substring(1);
+        
+        if (!roomPassword) {
+            roomPassword = prompt("Введите пароль комнаты:");
+            window.location.hash = roomPassword;
+        }
+
+        const logDiv = document.getElementById('log');
+        const inputEl = document.getElementById('input');
+        const sendBtn = document.getElementById('btn-send');
+        const settingsBtn = document.getElementById('btn-settings');
+        const settingsPanel = document.getElementById('settings-panel');
+        const clearBtn = document.getElementById('btn-clear');
+        const ttlSelect = document.getElementById('ttl-select');
+        const onlineCountEl = document.getElementById('online-count');
+
+        const myId = Math.random().toString(36).substring(2, 8);
+        let processedIndex = 0;
+        let cryptoKey = null;
+        let currentTTL = "0";
+        let pollTimer;
+
+        // UI Логика
+        settingsBtn.onclick = () => settingsPanel.classList.toggle('active');
+        document.addEventListener('click', (e) => {
+            if(!settingsBtn.contains(e.target) && !settingsPanel.contains(e.target)) {
+                settingsPanel.classList.remove('active');
+            }
+        });
+
+        // Авто-расширение поля ввода
+        inputEl.addEventListener('input', function() {
+            this.style.height = '46px';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        // Форматирование времени (HH:MM)
+        function formatTime(ts) {
+            const d = new Date(ts);
+            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+        }
+
+        function printMsg(text, type, timestamp = null) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('msg', type);
+            
+            const textSpan = document.createElement('span');
+            textSpan.textContent = text;
+            msgDiv.appendChild(textSpan);
+
+            // Добавляем метку времени, если это не системное сообщение
+            if (timestamp && type !== 'system') {
+                const timeSpan = document.createElement('span');
+                timeSpan.classList.add('msg-time');
+                timeSpan.textContent = formatTime(timestamp);
+                msgDiv.appendChild(timeSpan);
+            }
+
+            logDiv.appendChild(msgDiv);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // --- ВОЕННАЯ КРИПТОГРАФИЯ ---
+        async function setupCrypto(password) {
+            const enc = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
+            cryptoKey = await crypto.subtle.deriveKey(
+                {name: "PBKDF2", salt: enc.encode(roomId), iterations: 100000, hash: "SHA-256"},
+                keyMaterial, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]
+            );
+            inputEl.disabled = false;
+            sendBtn.disabled = false;
+            printMsg("Криптографический канал защищен.", "system");
+        }
+
+        async function encryptMsg(text) {
+            const enc = new TextEncoder();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, cryptoKey, enc.encode(text));
+            const combined = new Uint8Array(12 + encrypted.byteLength);
+            combined.set(iv, 0); combined.set(new Uint8Array(encrypted), 12);
+            return btoa(String.fromCharCode.apply(null, combined));
+        }
+
+        async function decryptMsg(base64) {
+            try {
+                const str = atob(base64);
+                const combined = new Uint8Array(str.length);
+                for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
+                const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, cryptoKey, combined.slice(12));
+                return new TextDecoder().decode(decrypted);
+            } catch(e) { return null; }
+        }
+
+        // --- REST API ---
+        async function redisCmd(commandArray) {
+            try {
+                const res = await fetch(UPSTASH_URL, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(commandArray)
+                });
+                const data = await res.json();
+                return data.result;
+            } catch (e) { return null; }
+        }
+
+        // --- ОТПРАВКА СООБЩЕНИЙ ---
+        async function sendMessage() {
+            const text = inputEl.value.trim();
+            if (!text) return;
+            
+            inputEl.value = '';
+            inputEl.style.height = '46px'; // Сброс высоты поля
+            
+            const encryptedText = await encryptMsg(text);
+            
+            // Payload теперь содержит метку времени 't'
+            const payload = { s: myId, d: encryptedText, t: Date.now() };
+            
+            await redisCmd(["RPUSH", `chat:${roomId}`, JSON.stringify(payload)]);
+            
+            if (currentTTL !== "0") {
+                await redisCmd(["EXPIRE", `chat:${roomId}`, currentTTL]);
+            }
+            
+            fetchMessages();
+        }
+
+        // Обработка Enter (отправка) и Shift+Enter (перенос строки)
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Предотвращаем стандартный перенос строки
+                sendMessage();
+            }
+        });
+        sendBtn.addEventListener('click', sendMessage);
+
+        // --- СИНХРОНИЗАЦИЯ НАСТРОЕК (TTL) ---
+        async function updateTTL(newTTL, isLocalTrigger = false) {
+            currentTTL = newTTL;
+            ttlSelect.value = newTTL;
+            
+            if (isLocalTrigger) {
+                await redisCmd(["SET", `cfg:ttl:${roomId}`, newTTL]);
+                if (newTTL === "0") {
+                    await redisCmd(["PERSIST", `chat:${roomId}`]);
+                    printMsg("Автоочистка отключена.", "system");
+                } else {
+                    await redisCmd(["EXPIRE", `chat:${roomId}`, newTTL]);
+                    const hrs = newTTL / 3600;
+                    printMsg(`Автоочистка: ${hrs >= 24 ? hrs/24 + ' дн.' : hrs + ' ч.'}`, "system");
+                }
+            }
+        }
+        ttlSelect.addEventListener('change', (e) => updateTTL(e.target.value, true));
+
+        // --- ГЛАВНЫЙ ЦИКЛ ОПРОСА ---
+        async function fetchMessages() {
+            if (!cryptoKey) return;
+
+            // Heartbeat (Сигнал присутствия в КОМНАТЕ)
+            await redisCmd(["SET", `p:${roomId}:${myId}`, "1", "EX", 12]);
+
+            const [activeKeys, remoteTTL, items] = await Promise.all([
+                redisCmd(["KEYS", `p:${roomId}:*`]),
+                redisCmd(["GET", `cfg:ttl:${roomId}`]),
+                redisCmd(["LRANGE", `chat:${roomId}`, 0, -1])
+            ]);
+
+            // Обновляем счетчик "В КОМНАТЕ"
+            if (activeKeys && Array.isArray(activeKeys)) {
+                onlineCountEl.textContent = `${activeKeys.length} в комнате`;
+            }
+
+            if (remoteTTL !== null && remoteTTL !== currentTTL) updateTTL(remoteTTL, false);
+
+            if (!items || items.length === 0) {
+                if (processedIndex > 0) {
+                    logDiv.innerHTML = '';
+                    printMsg("История чата очищена.", "system");
+                    processedIndex = 0;
+                }
+                return;
+            }
+
+            // Читаем новые сообщения (Рендер с меткой времени)
+            for (let i = processedIndex; i < items.length; i++) {
+                const msg = JSON.parse(items[i]);
+                const decryptedText = await decryptMsg(msg.d);
+                if (decryptedText !== null) {
+                    // Передаем текст, тип (вы/собеседник) и время (msg.t)
+                    printMsg(decryptedText, msg.s === myId ? 'you' : 'peer', msg.t);
+                }
+            }
+            processedIndex = items.length;
+        }
+
+        // Адаптивный опрос базы
+        function startPolling(interval) {
+            if(pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(fetchMessages, interval);
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            startPolling(document.visibilityState === 'visible' ? 2000 : 10000);
+        });
+
+        clearBtn.addEventListener('click', async () => {
+            if (confirm("Переписка будет уничтожена навсегда. Вы уверены?")) {
+                settingsPanel.classList.remove('active');
+                await redisCmd(["DEL", `chat:${roomId}`]);
+                logDiv.innerHTML = '';
+                processedIndex = 0;
+                printMsg("Вы очистили чат.", "system");
+            }
+        });
+
+        // Старт
+        setupCrypto(roomPassword).then(() => {
+            fetchMessages();
+            startPolling(2000);
+        });
+    </script>
+</body>
+</html>
