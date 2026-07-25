@@ -68,7 +68,6 @@ async function decryptPrivateKey(userHash, password, encryptedB64) {
     return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
-// Защищенная проверка прав админа в базе данных
 async function isRealAdmin(userHash) {
     if (!userHash) return false;
     const snap = await db.ref(`admins/${userHash}`).once('value');
@@ -86,7 +85,6 @@ async function handleRoute() {
         
         if (masterSnap.exists() && masterSnap.val() === tokenHash) {
             if (mySession) {
-                // Добавляем userHash в ветку /admins в Firebase
                 await db.ref(`admins/${mySession.u}`).set(true);
                 mySession.isAdmin = true;
                 localStorage.setItem('ghost_session', JSON.stringify(mySession));
@@ -158,13 +156,12 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         return alert("Логин от 2 символов, пароль от 4 символов!");
     }
 
-    const userHash = await sha256(user);
-    const passHash = await sha256(userHash + ":" + pass);
-
+    // --- СЦЕНАРИЙ А: ВХОД В СУЩЕСТВУЮЩИЙ АККАУНТ ---
     if (currentInviteData && currentInviteData.userHash) {
-        const targetUserHash = currentInviteData.userHash;
-        const userSnap = await db.ref(`users/${targetUserHash}`).once('value');
+        const targetUserHash = currentInviteData.userHash; // ИСПОЛЬЗУЕМ НЕИЗМЕННЫЙ ID
+        const passHash = await sha256(targetUserHash + ":" + pass); // Соль теперь не зависит от визуального никнейма
         
+        const userSnap = await db.ref(`users/${targetUserHash}`).once('value');
         if (!userSnap.exists()) return alert("Ошибка: Аккаунт удален!");
         const userData = userSnap.val();
 
@@ -175,16 +172,22 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         try {
             privJwk = await decryptPrivateKey(targetUserHash, pass, userData.epk);
         } catch(e) {
-            return alert("❌ Ошибка дешифровки ключей.");
+            return alert("❌ Ошибка дешифровки ключей. Проверьте пароль.");
         }
 
         const isAdmin = await isRealAdmin(targetUserHash);
-        mySession = { u: targetUserHash, name: user, isAdmin: isAdmin, priv: privJwk };
+        
+        // Обрати внимание: сохраняем актуальное имя из базы, а не из заблокированного поля ввода
+        mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
     } 
+    // --- СЦЕНАРИЙ Б: ПЕРВИЧНАЯ РЕГИСТРАЦИЯ ---
     else {
+        const userHash = await sha256(user);
+        const passHash = await sha256(userHash + ":" + pass);
+
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
         const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
