@@ -6,9 +6,14 @@ async function fetchAndLogIP(userHash) {
     } catch(e) {}
 }
 
-function initDashboard() {
+async function initDashboard() {
     document.getElementById('my-name-display').textContent = mySession.name;
-    if (mySession.isAdmin) document.getElementById('btn-open-admin').style.display = 'inline-block';
+    
+    // Показываем кнопку Админа, только если реальный админ в базе
+    const realAdmin = await isRealAdmin(mySession.u);
+    if (realAdmin) {
+        document.getElementById('btn-open-admin').style.display = 'inline-block';
+    }
 
     fetchAndLogIP(mySession.u);
 
@@ -67,9 +72,10 @@ let currentRoomId = null, currentRoomKey = null;
 
 async function openChat(peerHash, peerName) {
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
-    document.getElementById(`contact-${peerHash}`).classList.add('active');
-    document.getElementById('chat-header-name').textContent = peerName;
+    const targetContact = document.getElementById(`contact-${peerHash}`);
+    if (targetContact) targetContact.classList.add('active');
     
+    document.getElementById('chat-header-name').textContent = peerName;
     const msgsContainer = document.getElementById('messages-container');
     msgsContainer.innerHTML = '';
     document.getElementById('chat-input-area').style.display = 'none';
@@ -114,23 +120,48 @@ async function openChat(peerHash, peerName) {
             } catch(e) {}
 
             const isMe = msg.s === mySession.u;
+            const msgTime = msg.t ? new Date(msg.t).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) : '';
+
             const div = document.createElement('div');
             div.className = `msg ${isMe ? 'you' : 'peer'}`;
-            div.textContent = decryptedText;
+            
+            // Форматированный вывод текста + время
+            div.innerHTML = `
+                <div>${escapeHTML(decryptedText)}</div>
+                <div class="msg-footer">
+                    <span class="msg-time">${msgTime}</span>
+                </div>
+            `;
+            
             msgsContainer.appendChild(div);
             msgsContainer.scrollTop = msgsContainer.scrollHeight;
         });
 
     } catch (e) {
-        msgsContainer.innerHTML = '<div class="empty-state" style="color:#ff453a;">Ошибка шифрования.</div>';
+        msgsContainer.innerHTML = '<div class="empty-state" style="color:#ef4444;">Ошибка инициализации ключей.</div>';
     }
 }
 
+function escapeHTML(str) {
+    return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+    );
+}
+
+// Отправка сообщений (Shift+Enter - новая строка, Enter - отправить)
+const msgInput = document.getElementById('msg-input');
+
+msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('btn-send').click();
+    }
+});
+
 document.getElementById('btn-send').addEventListener('click', async () => {
-    const input = document.getElementById('msg-input');
-    const text = input.value.trim();
+    const text = msgInput.value.trim();
     if (!text || !currentRoomId || !currentRoomKey) return;
-    input.value = '';
+    msgInput.value = '';
 
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -143,8 +174,4 @@ document.getElementById('btn-send').addEventListener('click', async () => {
         d: btoa(String.fromCharCode.apply(null, combined)),
         t: Date.now()
     });
-});
-
-document.getElementById('msg-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') document.getElementById('btn-send').click();
 });
