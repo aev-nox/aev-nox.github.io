@@ -11,7 +11,10 @@ let mySession = JSON.parse(localStorage.getItem('ghost_session')) || null;
 
 function showView(viewName) {
     Object.values(views).forEach(el => el.classList.remove('active', 'active-flex'));
-    document.body.classList.toggle('app-theme', viewName !== '404');
+    if(viewName !== '404') {
+        document.body.classList.add('app-theme');
+        document.body.style = ""; // Сбрасываем стили nginx
+    }
     document.title = viewName === '404' ? "404 Not Found" : "Ghost Core";
     
     const target = views[viewName];
@@ -88,24 +91,20 @@ async function handleRoute() {
                 await db.ref(`admins/${mySession.u}`).set(true);
                 mySession.isAdmin = true;
                 localStorage.setItem('ghost_session', JSON.stringify(mySession));
-                alert("👑 Права Администратора официально подтверждены!");
                 window.location.hash = '#/admin';
             } else {
-                alert("👑 Ключ Админа принят! Зарегистрируйтесь, чтобы войти в админку.");
                 sessionStorage.setItem('pending_admin', 'true');
                 setupAuthUI(false, "Администратор");
                 showView('invite');
             }
             return;
         } else {
-            showView('404');
-            return;
+            showView('404'); return;
         }
     }
 
     if (mySession && hash !== '#/app' && hash !== '#/admin') { 
-        window.location.hash = '#/app'; 
-        return; 
+        window.location.hash = '#/app'; return; 
     }
 
     if (hash.startsWith('#/inv/')) {
@@ -137,8 +136,7 @@ async function handleRoute() {
     else if (hash === '#/admin') {
         const hasAdminRights = mySession && await isRealAdmin(mySession.u);
         if (hasAdminRights) {
-            showView('admin'); 
-            initAdminPanel(); 
+            showView('admin'); initAdminPanel(); 
         } else {
             window.location.hash = '#/app';
         }
@@ -148,52 +146,70 @@ async function handleRoute() {
 
 window.addEventListener('hashchange', handleRoute);
 
+// ЕДИНЫЙ ЦЕНТР АВТОРИЗАЦИИ
 document.getElementById('btn-register').addEventListener('click', async () => {
     const user = document.getElementById('reg-username').value.trim();
     const pass = document.getElementById('reg-password').value.trim();
-    
-    if (user.length < 2 || pass.length < 4) {
-        return alert("Логин от 2 символов, пароль от 4 символов!");
-    }
+    if (user.length < 2 || pass.length < 4) return alert("Логин от 2 символов, пароль от 4 символов!");
 
-    // --- СЦЕНАРИЙ А: ВХОД В СУЩЕСТВУЮЩИЙ АККАУНТ ---
-    if (currentInviteData && currentInviteData.userHash) {
-        const targetUserHash = currentInviteData.userHash; // ИСПОЛЬЗУЕМ НЕИЗМЕННЫЙ ID
-        const passHash = await sha256(targetUserHash + ":" + pass); // Соль теперь не зависит от визуального никнейма
-        
-        const userSnap = await db.ref(`users/${targetUserHash}`).once('value');
-        if (!userSnap.exists()) return alert("Ошибка: Аккаунт удален!");
+    const userHash = await sha256(user);
+    const passHash = await sha256(userHash + ":" + pass);
+
+    const userSnap = await db.ref(`users/${userHash}`).once('value');
+
+    // СЦЕНАРИЙ А: ПОЛЬЗОВАТЕЛЬ УЖЕ СУЩЕСТВУЕТ (ВХОД)
+    if (userSnap.exists()) {
         const userData = userSnap.val();
+        
+        if (userData.isBanned) return alert("⛔ Аккаунт заблокирован!");
 
-        if (userData.isBanned) return alert("⛔ Ваш аккаунт заблокирован!");
+        // Проверка на сброс пароля админом
+        if (!userData.ph) {
+            // Режим восстановления ключей после сброса
+            const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
+            const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+            const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+            const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
+
+            await db.ref(`users/${userHash}`).update({ pk: pubJwk, epk: encryptedPrivKey, ph: passHash });
+            alert("🔑 Новый пароль установлен. Ключи перегенерированы.");
+            
+            const isAdmin = await isRealAdmin(userHash);
+            mySession = { u: userHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
+            localStorage.setItem('ghost_session', JSON.stringify(mySession));
+            window.location.hash = isAdmin ? '#/admin' : '#/app';
+            return;
+        }
+
+        // Обычный логин
         if (userData.ph !== passHash) return alert("❌ Неверный пароль!");
 
         let privJwk = null;
         try {
-            privJwk = await decryptPrivateKey(targetUserHash, pass, userData.epk);
+            privJwk = await decryptPrivateKey(userHash, pass, userData.epk);
         } catch(e) {
             return alert("❌ Ошибка дешифровки ключей. Проверьте пароль.");
         }
 
-        const isAdmin = await isRealAdmin(targetUserHash);
-        
-        // Обрати внимание: сохраняем актуальное имя из базы, а не из заблокированного поля ввода
-        mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
+        const isAdmin = await isRealAdmin(userHash);
+        mySession = { u: userHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
+        sessionStorage.removeItem('pending_admin');
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
     } 
-    // --- СЦЕНАРИЙ Б: ПЕРВИЧНАЯ РЕГИСТРАЦИЯ ---
+    // СЦЕНАРИЙ Б: НОВЫЙ ПОЛЬЗОВАТЕЛЬ (РЕГИСТРАЦИЯ)
     else {
-        const userHash = await sha256(user);
-        const passHash = await sha256(userHash + ":" + pass);
+        const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
+        if (!currentInviteData && !isPendingAdmin) {
+            return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта.");
+        }
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
         const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
 
         const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
-        const isAdmin = sessionStorage.getItem('pending_admin') === 'true';
 
         await db.ref(`users/${userHash}`).update({
             n: encodeBase64(user),
@@ -204,10 +220,7 @@ document.getElementById('btn-register').addEventListener('click', async () => {
             isBanned: false
         });
 
-        if (isAdmin) {
-            await db.ref(`admins/${userHash}`).set(true);
-        }
-        
+        if (isPendingAdmin) await db.ref(`admins/${userHash}`).set(true);
         await fetchAndLogIP(userHash);
 
         if (currentInviteHash) {
@@ -218,11 +231,11 @@ document.getElementById('btn-register').addEventListener('click', async () => {
             });
         }
         
-        mySession = { u: userHash, name: user, isAdmin: isAdmin, priv: privJwk };
+        mySession = { u: userHash, name: user, isAdmin: isPendingAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
         sessionStorage.removeItem('pending_admin');
 
-        window.location.hash = isAdmin ? '#/admin' : '#/app';
+        window.location.hash = isPendingAdmin ? '#/admin' : '#/app';
     }
 });
 
