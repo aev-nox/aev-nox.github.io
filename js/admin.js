@@ -34,6 +34,7 @@ function initAdminPanel() {
                     ${data.isBanned 
                         ? `<button class="btn-unban" onclick="toggleBan('${hash}', false)">Разбанить</button>` 
                         : `<button class="btn-ban" onclick="toggleBan('${hash}', true)">Забанить</button>`}
+                    <button class="btn-sm" style="background:#5e5ce6;" onclick="regenerateUserLink('${hash}')">🔄 Перегенерировать ссылку</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -47,6 +48,34 @@ window.toggleBan = async function(userHash, state) {
     }
 };
 
+// Перегенерация новой персональной ссылки для пользователя
+window.regenerateUserLink = async function(userHash) {
+    if(!confirm("Старая ссылка пользователя станет недействительной (404). Выдать новую?")) return;
+
+    const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+    const hashedToken = await sha256(rawToken);
+
+    // Удаляем старые инвайты этого юзера
+    const invitesSnap = await db.ref('invites').once('value');
+    invitesSnap.forEach(child => {
+        if (child.val().userHash === userHash) {
+            db.ref(`invites/${child.key}`).remove();
+        }
+    });
+
+    // Создаем новый привязанный инвайт
+    await db.ref(`invites/${hashedToken}`).set({
+        userHash: userHash,
+        registered: true,
+        updatedAt: Date.now()
+    });
+
+    const display = document.getElementById('invite-links-display');
+    display.style.display = 'block';
+    display.innerHTML = `✅ Ссылка пользователя обновлена! Отправьте ему:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+};
+
+// Создание чистого инвайта для нового юзера
 document.getElementById('btn-generate-invite').addEventListener('click', async () => {
     const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
     const hashedToken = await sha256(rawToken);
@@ -57,6 +86,7 @@ document.getElementById('btn-generate-invite').addEventListener('click', async (
     display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 });
 
+// Обновление Мастер-Ключа Админа
 document.getElementById('btn-change-master-key').addEventListener('click', async () => {
     const newToken = document.getElementById('master-key-input').value.trim();
     if (newToken.length < 6) return alert("Токен должен быть не менее 6 символов!");
@@ -70,5 +100,4 @@ document.getElementById('btn-change-master-key').addEventListener('click', async
     document.getElementById('master-key-input').value = '';
 });
 
-// Финальный запуск маршрутизатора
 handleRoute();
