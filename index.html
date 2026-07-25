@@ -13,7 +13,8 @@
 <body>
 
     <div id="view-404" class="view active">
-        <h1>404 Not Found</h1><p>nginx</p>
+        <h1>404 Not Found</h1>
+        <p>nginx</p>
     </div>
 
     <div id="view-invite" class="view auth-container">
@@ -43,7 +44,10 @@
                     <span id="crypto-badge" style="font-size: 0.8em; color: #32d74b; display:none;">🔒 ECDH E2EE Активен</span>
                 </div>
                 <div class="messages" id="messages-container">
-                    <div class="empty-state">Секретный канал связи<br><span style="font-size:0.7em; color:#666;">(Асимметричное E2EE шифрование)</span></div>
+                    <div class="empty-state">
+                        Секретный канал связи<br>
+                        <span style="font-size:0.7em; color:#666;">(Асимметричное E2EE шифрование)</span>
+                    </div>
                 </div>
                 <div class="chat-input" id="chat-input-area" style="display: none;">
                     <input type="text" id="msg-input" placeholder="Сообщение...">
@@ -62,7 +66,11 @@
             <table class="admin-table">
                 <thead>
                     <tr>
-                        <th>Пользователь</th><th>Статус</th><th>Последний вход</th><th>Лог IP</th><th>Действия</th>
+                        <th>Пользователь</th>
+                        <th>Статус</th>
+                        <th>Последний вход</th>
+                        <th>Лог IP адресов</th>
+                        <th>Действия</th>
                     </tr>
                 </thead>
                 <tbody id="admin-users-list"></tbody>
@@ -77,8 +85,9 @@
 
             <div class="admin-card">
                 <h3>🔑 Управление Мастер-Ссылкой Админа</h3>
+                <p style="color:#8a8a93; font-size: 0.9em;">Вы можете в любой момент сменить токен мастер-ссылки. Старая ссылка сразу станет выдавать 404.</p>
                 <div class="flex-row">
-                    <input type="text" id="master-key-input" placeholder="Новый токен">
+                    <input type="text" id="master-key-input" placeholder="Новый токен (например: MY-SECRET-KEY-777)">
                     <button class="btn-sm" id="btn-change-master-key" style="background:#ffd60a; color:#000; font-weight:bold; padding: 10px 15px;">Обновить</button>
                 </div>
                 <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
@@ -86,10 +95,5 @@
         </div>
     </div>
 
-    <script src="js/config.js"></script>
-    <script src="js/crypto.js"></script>
-    <script src="js/router.js"></script>
-    <script src="js/chat.js"></script>
-    <script src="js/admin.js"></script>
-</body>
+    <script src="js/crypto.js"></script>  <script src="js/config.js"></script>  <script src="js/router.js"></script>  <script src="js/chat.js"></script>    <script src="js/admin.js"></script>   </body>
 </html>
