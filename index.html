@@ -1,136 +1,79 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ghost E2EE Chat</title>
+    <title>404 Not Found</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
     <style>
-        :root { 
-            --bg-color: #0f0f11; 
-            --chat-bg: #18181d; 
-            --panel-bg: #22222a;
-            --text-main: #f0f0f0; 
-            --text-muted: #8a8a93; 
-            --accent: #5e5ce6; 
-            --bubble-me: #5e5ce6; 
-            --bubble-peer: #2c2c35; 
-            --danger: #ff453a;
-            --online: #32d74b;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        /* Базовый стиль для фальшивой 404 */
+        body { margin: 0; padding: 0; background-color: #fff; color: #000; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; }
         
-        body { 
-            background-color: var(--bg-color); color: var(--text-main); 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif; 
-            font-size: 15px; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden;
-        }
-        
-        .app-container { 
-            width: 100%; max-width: 600px; height: 100vh; 
-            display: flex; flex-direction: column; background: var(--chat-bg); 
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5); position: relative;
-        }
-        @media (min-width: 620px) { 
-            .app-container { height: 92vh; max-height: 900px; border-radius: 16px; border: 1px solid #2c2c35; } 
-        }
+        /* Стили для 404 */
+        #view-404 { text-align: center; padding-top: 10vh; }
+        #view-404 h1 { font-size: 2em; margin-bottom: 10px; }
+        #view-404 p { color: #666; }
 
-        .header { 
-            padding: 12px 18px; background: var(--panel-bg); 
-            display: flex; justify-content: space-between; align-items: center; 
-            border-bottom: 1px solid #2c2c35; z-index: 10;
-        }
-        .header-info { display: flex; flex-direction: column; gap: 3px; }
-        .header-title { font-weight: 600; font-size: 1.1em; display: flex; align-items: center; gap: 6px; }
-        .header-online { font-size: 0.85em; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-        .status-dot { width: 8px; height: 8px; background: var(--online); border-radius: 50%; box-shadow: 0 0 8px rgba(50, 215, 75, 0.5); }
+        /* Стили для реального приложения (изначально скрыто) */
+        .app-theme { background-color: #0a0a0c; color: #f0f0f0; display: flex; justify-content: center; align-items: center; height: 100vh; }
         
-        .header-actions { display: flex; align-items: center; gap: 8px; }
-        .icon-btn { background: none; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 4px; transition: 0.2s; }
-        .icon-btn:hover { color: var(--text-main); }
+        .view { display: none; }
+        .view.active { display: block; }
+        .view.active-flex { display: flex; }
 
-        .settings-panel {
-            position: absolute; top: 60px; right: 15px; background: #232329; border: 1px solid #33333d;
-            border-radius: 12px; padding: 12px; display: none; flex-direction: column; gap: 10px; z-index: 20;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.6); width: 220px;
+        /* Окно инвайта и входа */
+        .auth-box {
+            background: #15151a; border: 1px solid #2c2c35; border-radius: 12px;
+            padding: 30px; width: 90%; max-width: 400px;
+            display: flex; flex-direction: column; gap: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
         }
-        .settings-panel.active { display: flex; }
-        button.btn-danger { background: rgba(255, 69, 58, 0.1); color: var(--danger); border: 1px solid rgba(255, 69, 58, 0.3); cursor: pointer; width: 100%; font-weight: 600; padding: 8px; border-radius: 8px; transition: 0.2s;}
-        button.btn-danger:hover { background: rgba(255, 69, 58, 0.2); }
-
-        #log { 
-            flex: 1; overflow-y: auto; padding: 20px 15px; 
-            display: flex; flex-direction: column; gap: 8px; 
-            scroll-behavior: smooth;
+        .auth-box h2 { margin: 0 0 10px 0; font-size: 1.2em; text-align: center; color: #5e5ce6; }
+        .auth-box p { font-size: 0.9em; color: #8a8a93; text-align: center; margin-top: -5px;}
+        .auth-box input {
+            background: #0a0a0c; border: 1px solid #33333d; color: #fff;
+            padding: 12px; border-radius: 8px; font-size: 1em; outline: none; transition: 0.2s;
         }
+        .auth-box input:focus { border-color: #5e5ce6; }
+        .auth-box button {
+            background: #5e5ce6; color: white; border: none; padding: 12px;
+            border-radius: 8px; font-size: 1em; font-weight: 600; cursor: pointer; transition: 0.2s;
+        }
+        .auth-box button:hover { background: #4b49b8; }
         
-        .msg { 
-            max-width: 85%; padding: 8px 12px; border-radius: 14px; 
-            line-height: 1.4; font-size: 0.95em; position: relative;
-            white-space: pre-wrap; word-wrap: break-word;
-            display: flex; flex-direction: column;
-        }
-        .msg.system { align-self: center; background: transparent; color: var(--text-muted); font-size: 0.85em; text-align: center; margin: 8px 0; display: block; }
-        .msg.you { align-self: flex-end; background: var(--bubble-me); color: #fff; border-bottom-right-radius: 4px; }
-        .msg.peer { align-self: flex-start; background: var(--bubble-peer); color: var(--text-main); border-bottom-left-radius: 4px; }
-        
-        .msg-time {
-            font-size: 0.75em; align-self: flex-end; margin-top: 4px; margin-bottom: -2px;
-            opacity: 0.7; user-select: none;
-        }
-        .msg.peer .msg-time { color: var(--text-muted); }
-
-        .input-area { 
-            padding: 12px 16px; background: var(--panel-bg); 
-            border-top: 1px solid #2c2c35; display: flex; gap: 10px; align-items: flex-end;
-        }
-        
-        #input { 
-            flex: 1; background: #18181d; border: 1px solid #2c2c35; color: var(--text-main); 
-            padding: 12px 16px; border-radius: 20px; font-size: 1em; outline: none; transition: 0.2s;
-            resize: none; min-height: 46px; max-height: 150px; overflow-y: auto; font-family: inherit; line-height: 1.4;
-        }
-        #input:focus { border-color: var(--accent); background: #1c1c22; }
-        #input:disabled { opacity: 0.5; }
-        
-        .send-btn { 
-            background: var(--accent); border: none; border-radius: 50%; width: 46px; height: 46px; 
-            display: flex; justify-content: center; align-items: center; color: white; cursor: pointer; flex-shrink: 0; transition: 0.2s;
-        }
-        .send-btn:disabled { background: #2c2c35; color: var(--text-muted); cursor: not-allowed; }
+        /* Временный дашборд */
+        #view-app { flex-direction: column; text-align: center; gap: 20px;}
+        #view-app button.btn-danger { background: rgba(255,69,58,0.1); color: #ff453a; border: 1px solid rgba(255,69,58,0.3); padding: 10px 20px; border-radius: 8px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div class="app-container">
-        <div class="header">
-            <div class="header-info">
-                <div class="header-title">👻 Ghost Chat</div>
-                <div class="header-online"><span class="status-dot"></span> <span id="online-count">1 в комнате</span></div>
-            </div>
-            <div class="header-actions">
-                <button class="icon-btn" id="btn-sound" title="Вкл/Выкл звук">🔔</button>
-                <button class="icon-btn" id="btn-settings" title="Настройки">⚙️</button>
-            </div>
-        </div>
+    <div id="view-404" class="view active">
+        <h1>404 Not Found</h1>
+        <p>nginx</p>
+    </div>
 
-        <div class="settings-panel" id="settings-panel">
-            <button class="btn-danger" id="btn-clear">🗑 Очистить чат у всех</button>
-        </div>
-
-        <div id="log"></div>
-        
-        <div class="input-area">
-            <textarea id="input" rows="1" placeholder="Сообщение..." disabled></textarea>
-            <button class="send-btn" id="btn-send" disabled>➤</button>
+    <div id="view-invite" class="view">
+        <div class="auth-box">
+            <h2>Активация доступа</h2>
+            <p>Секретный токен принят. Создайте локальный ключ шифрования (пароль), чтобы войти в систему.</p>
+            <input type="text" id="reg-username" placeholder="Придумайте никнейм">
+            <input type="password" id="reg-password" placeholder="Придумайте надежный пароль">
+            <button id="btn-register">Зашифровать и Войти</button>
         </div>
     </div>
 
+    <div id="view-app" class="view">
+        <h2>🔒 Секретный Дашборд (В разработке)</h2>
+        <p>Вы успешно авторизованы. Ваш ключ находится в памяти браузера.</p>
+        <button class="btn-danger" id="btn-logout">Стереть ключи и выйти</button>
+    </div>
+
     <script>
-        // --- КОНФИГУРАЦИЯ FIREBASE ---
+        // --- 1. FIREBASE ИНИЦИАЛИЗАЦИЯ ---
         const firebaseConfig = {
             apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
             authDomain: "global-student-project.firebaseapp.com",
@@ -138,215 +81,132 @@
             storageBucket: "global-student-project.firebasestorage.app",
             messagingSenderId: "847057162581",
             appId: "1:847057162581:web:a49a07368e7173871b1fdc",
-            // ⚠️ Убедись, что зашел в Realtime Database и взял точный URL базы:
             databaseURL: "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app"
         };
-
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Данные комнаты и пароль
-        const urlParams = new URLSearchParams(window.location.search);
-        const roomId = urlParams.get('room') || 'ghost-room';
-        let roomPassword = window.location.hash.substring(1);
+        // --- 2. КРИПТОГРАФИЯ (Хэширование) ---
+        // Превращает любой текст в необратимый SHA-256 хэш
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // --- 3. РОУТЕР И ZERO TRUST ЛОГИКА ---
+        const view404 = document.getElementById('view-404');
+        const viewInvite = document.getElementById('view-invite');
+        const viewApp = document.getElementById('view-app');
         
-        if (!roomPassword) {
-            roomPassword = prompt("Введите пароль комнаты:");
-            window.location.hash = roomPassword;
+        let currentInviteHash = null;
+
+        function showView(viewElement, isAppTheme = false) {
+            document.querySelectorAll('.view').forEach(el => el.classList.remove('active', 'active-flex'));
+            if (isAppTheme) {
+                document.body.classList.add('app-theme');
+                document.title = "Ghost Platform";
+                viewElement.classList.add('active-flex');
+            } else {
+                document.body.classList.remove('app-theme');
+                document.title = "404 Not Found";
+                viewElement.classList.add('active');
+            }
         }
 
-        const logDiv = document.getElementById('log');
-        const inputEl = document.getElementById('input');
-        const sendBtn = document.getElementById('btn-send');
-        const settingsBtn = document.getElementById('btn-settings');
-        const soundBtn = document.getElementById('btn-sound');
-        const settingsPanel = document.getElementById('settings-panel');
-        const clearBtn = document.getElementById('btn-clear');
-        const onlineCountEl = document.getElementById('online-count');
+        // Главный маршрутизатор
+        async function handleRoute() {
+            const hash = window.location.hash;
 
-        const myId = Math.random().toString(36).substring(2, 8);
-        let cryptoKey = null;
-        let soundEnabled = localStorage.getItem('ghost_sound') !== 'false';
-        const renderedMsgs = new Set();
+            // Если есть локальный ключ (пользователь уже зареган)
+            if (localStorage.getItem('ghost_session') && hash !== '#/app') {
+                window.location.hash = '#/app';
+                return;
+            }
 
-        // UI Настройки Звука
-        function updateSoundUI() {
-            soundBtn.textContent = soundEnabled ? '🔔' : '🔕';
+            // Сценарий А: Открыт Секретный Инвайт
+            if (hash.startsWith('#/inv/')) {
+                const token = hash.replace('#/inv/', '');
+                const hashedToken = await sha256(token);
+                
+                try {
+                    // Проверяем, есть ли такой хэш инвайта в базе
+                    const snap = await db.ref(`invites/${hashedToken}`).once('value');
+                    if (snap.exists()) {
+                        currentInviteHash = hashedToken;
+                        showView(viewInvite, true);
+                    } else {
+                        throw new Error("Invalid");
+                    }
+                } catch (e) {
+                    // Если инвайт удален, неверный или база выдала ошибку
+                    showView(view404, false);
+                }
+            } 
+            // Сценарий Б: Дашборд
+            else if (hash === '#/app') {
+                if (localStorage.getItem('ghost_session')) {
+                    showView(viewApp, true);
+                } else {
+                    window.location.hash = ''; // Сброс
+                }
+            } 
+            // Сценарий В: Пустой или левый URL
+            else {
+                showView(view404, false);
+            }
         }
-        updateSoundUI();
 
-        soundBtn.onclick = () => {
-            soundEnabled = !soundEnabled;
-            localStorage.setItem('ghost_sound', soundEnabled);
-            updateSoundUI();
+        // Слушаем изменения URL и запускаем при загрузке
+        window.addEventListener('hashchange', handleRoute);
+        handleRoute();
+
+        // --- 4. РЕГИСТРАЦИЯ ПО ИНВАЙТУ ---
+        document.getElementById('btn-register').addEventListener('click', async () => {
+            const user = document.getElementById('reg-username').value.trim();
+            const pass = document.getElementById('reg-password').value.trim();
+            
+            if (user.length < 3 || pass.length < 6) {
+                alert("Имя от 3 символов, пароль от 6 символов.");
+                return;
+            }
+
+            const userHash = await sha256(user);
+            const passHash = await sha256(pass); // Временное решение, дальше привяжем AES
+
+            // 1. Создаем пользователя в базе (пока заглушка для Спринта 1)
+            await db.ref(`users/${userHash}`).set({
+                isActive: true,
+                created: Date.now()
+            });
+
+            // 2. Уничтожаем инвайт (чтобы второй раз по нему не зашли)
+            await db.ref(`invites/${currentInviteHash}`).remove();
+
+            // 3. Сохраняем сессию в локальное хранилище браузера
+            localStorage.setItem('ghost_session', JSON.stringify({ u: userHash, p: passHash }));
+            
+            // 4. Пускаем в дашборд
+            window.location.hash = '#/app';
+        });
+
+        // --- 5. ВЫХОД ---
+        document.getElementById('btn-logout').addEventListener('click', () => {
+            localStorage.removeItem('ghost_session');
+            window.location.hash = '';
+            window.location.reload();
+        });
+
+        // ==========================================
+        // ИНСТРУМЕНТ АДМИНА (Только для разработчика)
+        // Вызови в консоли браузера: createAdminInvite("my-secret-link")
+        // ==========================================
+        window.createAdminInvite = async function(tokenText) {
+            const hashed = await sha256(tokenText);
+            await db.ref(`invites/${hashed}`).set({ createdBy: "admin", timestamp: Date.now() });
+            console.log(`✅ Инвайт создан! Твоя ссылка:\n${window.location.origin}${window.location.pathname}#/inv/${tokenText}`);
         };
-
-        // Генерация звука "поп" через Web Audio API (0 байт файлов)
-        function playMessageSound() {
-            if (!soundEnabled) return;
-            try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
-                gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
-                osc.connect(gain); gain.connect(ctx.destination);
-                osc.start(); osc.stop(ctx.currentTime + 0.12);
-            } catch(e) {}
-        }
-
-        // Меню
-        settingsBtn.onclick = () => settingsPanel.classList.toggle('active');
-        document.addEventListener('click', (e) => {
-            if(!settingsBtn.contains(e.target) && !settingsPanel.contains(e.target)) {
-                settingsPanel.classList.remove('active');
-            }
-        });
-
-        // Авто-рост поля ввода
-        inputEl.addEventListener('input', function() {
-            this.style.height = '46px';
-            this.style.height = (this.scrollHeight) + 'px';
-        });
-
-        function formatTime(ts) {
-            const d = new Date(ts);
-            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-        }
-
-        function printMsg(text, type, timestamp = null) {
-            const msgDiv = document.createElement('div');
-            msgDiv.classList.add('msg', type);
-            
-            const textSpan = document.createElement('span');
-            textSpan.textContent = text;
-            msgDiv.appendChild(textSpan);
-
-            if (timestamp && type !== 'system') {
-                const timeSpan = document.createElement('span');
-                timeSpan.classList.add('msg-time');
-                timeSpan.textContent = formatTime(timestamp);
-                msgDiv.appendChild(timeSpan);
-            }
-
-            logDiv.appendChild(msgDiv);
-            logDiv.scrollTop = logDiv.scrollHeight;
-        }
-
-        // --- КРИПТОГРАФИЯ (AES-GCM) ---
-        async function setupCrypto(password) {
-            const enc = new TextEncoder();
-            const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
-            cryptoKey = await crypto.subtle.deriveKey(
-                {name: "PBKDF2", salt: enc.encode(roomId), iterations: 100000, hash: "SHA-256"},
-                keyMaterial, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]
-            );
-            inputEl.disabled = false;
-            sendBtn.disabled = false;
-            printMsg("Канал защищен шифрованием AES-GCM.", "system");
-        }
-
-        async function encryptMsg(text) {
-            const enc = new TextEncoder();
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, cryptoKey, enc.encode(text));
-            const combined = new Uint8Array(12 + encrypted.byteLength);
-            combined.set(iv, 0); combined.set(new Uint8Array(encrypted), 12);
-            return btoa(String.fromCharCode.apply(null, combined));
-        }
-
-        async function decryptMsg(base64) {
-            try {
-                const str = atob(base64);
-                const combined = new Uint8Array(str.length);
-                for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
-                const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, cryptoKey, combined.slice(12));
-                return new TextDecoder().decode(decrypted);
-            } catch(e) { return null; }
-        }
-
-        // --- FIREBASE REALTIME WEBSOCKETS ---
-        function initFirebaseListeners() {
-            const roomRef = db.ref(`rooms/${roomId}`);
-            const messagesRef = roomRef.child('messages');
-            const presenceRef = roomRef.child('presence').child(myId);
-            const connectedRef = db.ref('.info/connected');
-
-            // 1. Онлайн Присутствие (Presence System)
-            connectedRef.on('value', (snap) => {
-                if (snap.val() === true) {
-                    presenceRef.onDisconnect().remove();
-                    presenceRef.set(true);
-                }
-            });
-
-            roomRef.child('presence').on('value', (snap) => {
-                const count = snap.numChildren() || 1;
-                onlineCountEl.textContent = `${count} в комнате`;
-            });
-
-            // 2. Подписка на сообщения в реальном времени (WebSocket Push)
-            messagesRef.on('child_added', async (snap) => {
-                const msgId = snap.key;
-                if (renderedMsgs.has(msgId)) return;
-                renderedMsgs.add(msgId);
-
-                const msg = snap.val();
-                const text = await decryptMsg(msg.d);
-                if (text !== null) {
-                    const isMe = msg.s === myId;
-                    printMsg(text, isMe ? 'you' : 'peer', msg.t);
-                    if (!isMe) playMessageSound();
-                }
-            });
-
-            // 3. Отслеживание очистки чата
-            messagesRef.on('value', (snap) => {
-                if (!snap.exists()) {
-                    logDiv.innerHTML = '';
-                    renderedMsgs.clear();
-                    printMsg("История чата очищена.", "system");
-                }
-            });
-        }
-
-        // Отправка сообщений
-        async function sendMessage() {
-            const text = inputEl.value.trim();
-            if (!text || !cryptoKey) return;
-            
-            inputEl.value = '';
-            inputEl.style.height = '46px';
-            
-            const encryptedText = await encryptMsg(text);
-            const payload = { s: myId, d: encryptedText, t: Date.now() };
-            
-            db.ref(`rooms/${roomId}/messages`).push(payload);
-        }
-
-        inputEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-        sendBtn.addEventListener('click', sendMessage);
-
-        // Очистка чата у всех
-        clearBtn.addEventListener('click', () => {
-            if (confirm("Вы действительно хотите удалить всю переписку для всех?")) {
-                settingsPanel.classList.remove('active');
-                db.ref(`rooms/${roomId}/messages`).remove();
-            }
-        });
-
-        // Запуск
-        setupCrypto(roomPassword).then(() => {
-            initFirebaseListeners();
-        });
     </script>
 </body>
 </html>
