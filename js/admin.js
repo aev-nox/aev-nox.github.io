@@ -15,6 +15,14 @@ function initAdminPanel() {
         snap.forEach(child => {
             const data = child.val();
             const hash = child.key;
+
+            // 🛡️ БРОНЯ ОТ ЗОМБИ-ЗАПИСЕЙ (ФАНТОМОВ)
+            // Если узел поврежден или не имеет имени, удаляем этот мусор и пропускаем
+            if (!data || !data.n) {
+                db.ref(`users/${hash}`).remove();
+                return;
+            }
+
             const name = decodeBase64(data.n);
             const isOnline = onlineUsers.has(hash);
             
@@ -43,6 +51,12 @@ function initAdminPanel() {
             tbody.appendChild(tr);
         });
     });
+}
+
+function escapeHTML(str) {
+    return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+    );
 }
 
 window.toggleBan = async function(userHash, state) {
@@ -98,7 +112,6 @@ window.regenerateUserLink = async function(userHash) {
         updatedAt: Date.now()
     });
 
-    // Убиваем текущую сессию
     await db.ref(`users/${userHash}/linkRevokedAt`).set(Date.now());
 
     const display = document.getElementById('invite-links-display');
