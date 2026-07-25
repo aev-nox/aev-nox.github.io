@@ -55,8 +55,18 @@
             </div>
             <div class="chat-area">
                 <div class="chat-header">
-                    <span id="chat-header-name">Выберите чат</span>
-                    <span id="crypto-badge" style="display:none;">🔒 ECDH E2EE Активен</span>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span id="chat-header-name">Выберите чат</span>
+                        <span id="crypto-badge" style="display:none;">🔒 ECDH E2EE</span>
+                    </div>
+                    <div id="chat-controls" style="display:none; align-items:center; gap:10px;">
+                        <select id="auto-clean-select" class="btn-sm" style="background:var(--bg-main); border:1px solid var(--border-color); color:var(--text-secondary); outline:none;">
+                            <option value="0">⏱️ Автоочистка: Выкл</option>
+                            <option value="3600000">⏱️ Автоочистка: 1 час</option>
+                            <option value="86400000">⏱️ Автоочистка: 24 часа</option>
+                        </select>
+                        <button class="btn-sm" id="btn-clear-chat" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">🗑️ Очистить</button>
+                    </div>
                 </div>
                 <div class="messages" id="messages-container">
                     <div class="empty-state">
