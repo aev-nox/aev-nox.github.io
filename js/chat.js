@@ -18,6 +18,7 @@ async function initDashboard() {
 
     const myPresenceRef = db.ref(`presence/${mySession.u}`);
     const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
+    
     db.ref('.info/connected').on('value', (snap) => {
         if (snap.val() === true) {
             myPresenceRef.onDisconnect().remove();
@@ -26,15 +27,26 @@ async function initDashboard() {
         }
     });
 
-    db.ref(`users/${mySession.u}/isBanned`).on('value', (snap) => {
-        if (snap.val() === true) {
+    // 🛡️ ЕДИНЫЙ БРОНЕБОЙНЫЙ KILL-SWITCH (УДАЛЕНИЕ / БАН / СБРОС)
+    db.ref(`users/${mySession.u}`).on('value', (snap) => {
+        if (!snap.exists()) {
+            // АКТИВНОЕ УДАЛЕНИЕ: Отменяем onDisconnect, чтобы не оставить зомби-запись!
+            myPresenceRef.onDisconnect().cancel();
+            myLastSeenRef.onDisconnect().cancel();
+            myPresenceRef.remove();
+            
+            alert("⚠️ Ваш аккаунт был полностью удален администратором.");
             localStorage.removeItem('ghost_session');
             window.location.hash = ''; window.location.reload();
+            return;
         }
-    });
 
-    db.ref(`users/${mySession.u}/ph`).on('value', (snap) => {
-        if (snap.val() === null) {
+        const userData = snap.val();
+        if (userData.isBanned) {
+            alert("⛔ Ваш аккаунт заблокирован!");
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
+        } else if (!userData.ph) {
             alert("⚠️ Администратор сбросил ваши ключи безопасности. Требуется повторная авторизация.");
             localStorage.removeItem('ghost_session');
             window.location.hash = ''; window.location.reload();
@@ -57,7 +69,9 @@ async function initDashboard() {
         snap.forEach(child => {
             if (child.key === mySession.u) return;
             const data = child.val();
-            if (data.isBanned) return;
+
+            // 🛡️ БРОНЯ КОНТАКТОВ ОТ ЗОМБИ-ЗАПИСЕЙ
+            if (!data || !data.n || data.isBanned) return;
 
             const name = decodeBase64(data.n);
             const div = document.createElement('div');
@@ -103,10 +117,8 @@ async function openChat(peerHash, peerName) {
     const hashes = [mySession.u, peerHash].sort();
     currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
 
-    // ИСПРАВЛЕНИЕ ДУБЛИРОВАНИЯ: Отписываемся от старой ветки сообщений
     db.ref(`rooms/${currentRoomId}/messages`).off();
 
-    // Слушатель публичного ключа собеседника
     if (window.currentPeerPkRef) window.currentPeerPkRef.off();
     window.currentPeerPkRef = db.ref(`users/${peerHash}/pk`);
     
@@ -140,18 +152,15 @@ async function openChat(peerHash, peerName) {
         }
     });
 
-    // Слушатель настроек автоочистки комнаты
     db.ref(`rooms/${currentRoomId}/ttl`).on('value', (snap) => {
         const ttl = snap.val() || "0";
         document.getElementById('auto-clean-select').value = ttl;
     });
 
-    // Слушатель сообщений
     db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
         const msg = snapMsg.val();
         const msgKey = snapMsg.key;
 
-        // Проверка правила автоочистки
         const ttlSnap = await db.ref(`rooms/${currentRoomId}/ttl`).once('value');
         const ttlVal = Number(ttlSnap.val() || 0);
         if (ttlVal > 0 && msg.t && (Date.now() - msg.t > ttlVal)) {
@@ -184,22 +193,17 @@ async function openChat(peerHash, peerName) {
         msgsContainer.scrollTop = msgsContainer.scrollHeight;
     });
 
-    // Обработка удаления всех сообщений в реальном времени
     db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
-        if (!snap.exists()) {
-            msgsContainer.innerHTML = '';
-        }
+        if (!snap.exists()) msgsContainer.innerHTML = '';
     });
 }
 
-// Изменение таймера автоочистки
 document.getElementById('auto-clean-select').addEventListener('change', async (e) => {
     if (!currentRoomId) return;
     const val = e.target.value;
     await db.ref(`rooms/${currentRoomId}/ttl`).set(val);
 });
 
-// Кнопка «Очистить чат» (у обоих пользователей)
 document.getElementById('btn-clear-chat').addEventListener('click', async () => {
     if (!currentRoomId) return;
     if (confirm("⚠️ Вы уверены, что хотите полностью очистить историю сообщений? Переписка будет удалена У ОБОИХ участников.")) {
