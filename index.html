@@ -18,10 +18,10 @@
         #view-404 h1 { font-size: 2em; margin-bottom: 10px; }
         #view-404 p { color: #666; }
 
-        /* ТЕМНАЯ ТЕМА ПРИЛОЖЕНИЯ */
+        /* ТЕМНАЯ ТЕМА */
         .app-theme { background-color: #0a0a0c; color: #f0f0f0; }
 
-        /* БРОНЕБОЙНОЕ УПРАВЛЕНИЕ ОКНАМИ (!important решает проблему наслоения) */
+        /* УПРАВЛЕНИЕ ОКНАМИ (!important) */
         .view { display: none !important; width: 100vw; height: 100vh; }
         .view.active { display: block !important; }
         .view.active-flex { display: flex !important; justify-content: center; align-items: center; }
@@ -50,7 +50,7 @@
 
         /* Правая панель (Чат) */
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #0a0a0c; position: relative; min-width: 0; }
-        .chat-header { padding: 15px 20px; background: #15151a; border-bottom: 1px solid #2c2c35; font-weight: bold; }
+        .chat-header { padding: 15px 20px; background: #15151a; border-bottom: 1px solid #2c2c35; font-weight: bold; display: flex; justify-content: space-between; align-items: center;}
         .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; line-height: 1.4; word-wrap: break-word; }
         .msg.you { align-self: flex-end; background: #5e5ce6; color: #fff; border-bottom-right-radius: 2px; }
@@ -58,7 +58,7 @@
         .chat-input { padding: 15px; background: #15151a; border-top: 1px solid #2c2c35; display: flex; gap: 10px; }
         .chat-input input { flex: 1; background: #0a0a0c; border: 1px solid #33333d; color: #fff; padding: 12px 15px; border-radius: 20px; outline: none; }
         .chat-input button { background: #5e5ce6; color: white; border: none; width: 42px; height: 42px; border-radius: 50%; cursor: pointer; font-size: 1.2em; flex-shrink: 0;}
-        .empty-state { flex: 1; display: flex; justify-content: center; align-items: center; color: #666; font-size: 1.2em; }
+        .empty-state { flex: 1; display: flex; justify-content: center; align-items: center; color: #666; font-size: 1.2em; text-align: center; padding: 20px;}
 
         /* Кнопки */
         button.btn-sm { background: #2c2c35; color: #fff; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8em;}
@@ -92,8 +92,8 @@
         <div class="auth-box">
             <h2>Активация доступа</h2>
             <input type="text" id="reg-username" placeholder="Логин">
-            <input type="password" id="reg-password" placeholder="Секретный пароль">
-            <button id="btn-register">Зашифровать и войти</button>
+            <input type="password" id="reg-password" placeholder="Пароль (локальный)">
+            <button id="btn-register">Генерировать ключи и войти</button>
         </div>
     </div>
 
@@ -110,9 +110,12 @@
                 <div class="contacts-list" id="contacts-list"></div>
             </div>
             <div class="chat-area">
-                <div class="chat-header" id="chat-header">Выберите чат</div>
+                <div class="chat-header">
+                    <span id="chat-header-name">Выберите чат</span>
+                    <span id="crypto-badge" style="font-size: 0.8em; color: #32d74b; display:none;">🔒 ECDH Активен</span>
+                </div>
                 <div class="messages" id="messages-container">
-                    <div class="empty-state">Секретный канал связи</div>
+                    <div class="empty-state">Секретный канал связи<br><span style="font-size:0.7em; color:#666;">(Асимметричное E2EE шифрование)</span></div>
                 </div>
                 <div class="chat-input" id="chat-input-area" style="display: none;">
                     <input type="text" id="msg-input" placeholder="Сообщение...">
@@ -138,13 +141,12 @@
                         <th>Действия</th>
                     </tr>
                 </thead>
-                <tbody id="admin-users-list">
-                    </tbody>
+                <tbody id="admin-users-list"></tbody>
             </table>
 
             <div class="invite-panel">
                 <h3>Создать новый инвайт</h3>
-                <p style="color:#8a8a93; font-size: 0.9em; margin-bottom: 15px;">Генерирует одноразовую ссылку для регистрации нового пользователя.</p>
+                <p style="color:#8a8a93; font-size: 0.9em; margin-bottom: 15px;">Генерирует одноразовую ссылку для регистрации.</p>
                 <button class="btn-sm" id="btn-generate-invite" style="background: #5e5ce6; font-size: 1em; padding: 10px 20px;">+ Сгенерировать доступ</button>
                 <div class="invite-links" id="invite-links-display" style="display:none;"></div>
             </div>
@@ -162,7 +164,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // --- 2. КРИПТОГРАФИЯ И УТИЛИТЫ ---
+        // --- 2. УТИЛИТЫ ---
         async function sha256(message) {
             const msgBuffer = new TextEncoder().encode(message);
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -170,7 +172,6 @@
         }
         const encodeBase64 = (str) => btoa(encodeURIComponent(str));
         const decodeBase64 = (b64) => decodeURIComponent(atob(b64));
-        
         function formatTime(ts) {
             if(!ts) return "Никогда";
             return new Date(ts).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
@@ -193,31 +194,25 @@
         let currentInviteHash = null;
         let mySession = JSON.parse(localStorage.getItem('ghost_session')) || null;
 
+        // Миграция старых сессий (без ECDH ключей)
+        if (mySession && !mySession.priv) {
+            localStorage.removeItem('ghost_session');
+            window.location.reload();
+        }
+
         function showView(viewName) {
-            // Полностью сбрасываем видимость всех окон
             Object.values(views).forEach(el => el.classList.remove('active', 'active-flex'));
-            
-            // Настраиваем фон BODY
             document.body.classList.toggle('app-theme', viewName !== 404);
             document.title = viewName === 404 ? "404 Not Found" : "Ghost Core";
             
-            // Включаем только нужное окно
             const target = views[viewName];
-            if (viewName === 'app' || viewName === 'invite') {
-                target.classList.add('active-flex');
-            } else {
-                target.classList.add('active');
-            }
+            if (viewName === 'app' || viewName === 'invite') target.classList.add('active-flex');
+            else target.classList.add('active');
         }
 
         async function handleRoute() {
             const hash = window.location.hash;
-            
-            // Защита от возврата на инвайт/404 если уже вошли
-            if (mySession && hash !== '#/app' && hash !== '#/admin') { 
-                window.location.hash = '#/app'; 
-                return; 
-            }
+            if (mySession && hash !== '#/app' && hash !== '#/admin') { window.location.hash = '#/app'; return; }
 
             if (hash.startsWith('#/inv/')) {
                 const token = hash.replace('#/inv/', '');
@@ -234,39 +229,45 @@
             else showView(404);
         }
         window.addEventListener('hashchange', handleRoute);
-        handleRoute(); // Запуск при старте
+        handleRoute();
 
-        // --- 4. РЕГИСТРАЦИЯ И СБОР IP ---
         async function fetchAndLogIP(userHash) {
             try {
                 const res = await fetch('https://api.ipify.org?format=json');
                 const data = await res.json();
                 await db.ref(`users/${userHash}/ips/${Date.now()}`).set(encodeBase64(data.ip));
-            } catch(e) { console.error("IP Blocked"); }
+            } catch(e) {}
         }
 
+        // --- 4. РЕГИСТРАЦИЯ И ГЕНЕРАЦИЯ ECDH КЛЮЧЕЙ ---
         document.getElementById('btn-register').addEventListener('click', async () => {
             const user = document.getElementById('reg-username').value.trim();
-            const pass = document.getElementById('reg-password').value.trim();
             if (user.length < 2) return;
 
-            const userHash = await sha256(user);
-            const passHash = await sha256(pass);
+            // Генерируем пару ключей для асимметричного шифрования (ECDH P-256)
+            const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
+            const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+            const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
 
+            const userHash = await sha256(user);
+
+            // Сохраняем публичный ключ в базу
             await db.ref(`users/${userHash}`).update({
                 n: encodeBase64(user),
+                pk: pubJwk, // Public Key
                 created: Date.now(),
                 isBanned: false
             });
             await fetchAndLogIP(userHash);
             await db.ref(`invites/${currentInviteHash}`).remove();
             
-            mySession = { u: userHash, p: passHash, name: user, isAdmin: false };
+            // Приватный ключ остается только в localStorage браузера
+            mySession = { u: userHash, name: user, isAdmin: false, priv: privJwk };
             localStorage.setItem('ghost_session', JSON.stringify(mySession));
             window.location.hash = '#/app';
         });
 
-        // --- 5. ДАШБОРД (ЧАТ И KILL SWITCH) ---
+        // --- 5. ДАШБОРД ---
         function initDashboard() {
             document.getElementById('my-name-display').textContent = mySession.name;
             if (mySession.isAdmin) document.getElementById('btn-open-admin').style.display = 'inline-block';
@@ -275,7 +276,6 @@
 
             const myPresenceRef = db.ref(`presence/${mySession.u}`);
             const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
-            
             db.ref('.info/connected').on('value', (snap) => {
                 if (snap.val() === true) {
                     myPresenceRef.onDisconnect().remove();
@@ -284,16 +284,13 @@
                 }
             });
 
-            // KILL SWITCH
             db.ref(`users/${mySession.u}/isBanned`).on('value', (snap) => {
                 if (snap.val() === true) {
                     localStorage.removeItem('ghost_session');
-                    window.location.hash = '';
-                    window.location.reload();
+                    window.location.hash = ''; window.location.reload();
                 }
             });
 
-            // Загрузка контактов
             db.ref('users').on('value', (snap) => {
                 const list = document.getElementById('contacts-list');
                 list.innerHTML = '';
@@ -328,52 +325,76 @@
             });
         }
 
-        // --- 6. ЧАТЫ ---
+        // --- 6. ЧАТЫ И ECDH ШИФРОВАНИЕ ---
         let currentRoomId = null, currentRoomKey = null;
+
         async function openChat(peerHash, peerName) {
             document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
             document.getElementById(`contact-${peerHash}`).classList.add('active');
-            document.getElementById('chat-header').textContent = peerName;
-            document.getElementById('chat-input-area').style.display = 'flex';
+            document.getElementById('chat-header-name').textContent = peerName;
             
             const msgsContainer = document.getElementById('messages-container');
             msgsContainer.innerHTML = '';
+            document.getElementById('chat-input-area').style.display = 'none';
+            document.getElementById('crypto-badge').style.display = 'none';
 
-            const hashes = [mySession.u, peerHash].sort();
-            currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
-            
-            const enc = new TextEncoder();
-            const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(mySession.p), {name: "PBKDF2"}, false, ["deriveKey"]);
-            currentRoomKey = await crypto.subtle.deriveKey(
-                {name: "PBKDF2", salt: enc.encode(currentRoomId), iterations: 100000, hash: "SHA-256"},
-                keyMaterial, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]
-            );
+            // 1. Получаем публичный ключ собеседника из базы
+            const snap = await db.ref(`users/${peerHash}/pk`).once('value');
+            const peerPubJwk = snap.val();
 
-            db.ref('rooms').off();
-            db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snap) => {
-                const msg = snap.val();
-                let decryptedText = "[Ошибка]";
-                try {
-                    const str = atob(msg.d);
-                    const combined = new Uint8Array(str.length);
-                    for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
-                    const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
-                    decryptedText = new TextDecoder().decode(decrypted);
-                } catch(e) {}
+            if (!peerPubJwk) {
+                msgsContainer.innerHTML = '<div class="empty-state">У пользователя нет ключей шифрования.<br>Ему нужно пересоздать аккаунт.</div>';
+                return;
+            }
 
-                const isMe = msg.s === mySession.u;
-                const div = document.createElement('div');
-                div.className = `msg ${isMe ? 'you' : 'peer'}`;
-                div.textContent = decryptedText;
-                msgsContainer.appendChild(div);
-                msgsContainer.scrollTop = msgsContainer.scrollHeight;
-            });
+            try {
+                // 2. Вырабатываем общий секретный ключ AES-GCM (Диффи-Хеллман)
+                const peerPubKey = await crypto.subtle.importKey("jwk", peerPubJwk, {name: "ECDH", namedCurve: "P-256"}, true, []);
+                const myPrivKey = await crypto.subtle.importKey("jwk", mySession.priv, {name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
+
+                currentRoomKey = await crypto.subtle.deriveKey(
+                    {name: "ECDH", public: peerPubKey},
+                    myPrivKey,
+                    {name: "AES-GCM", length: 256},
+                    false,
+                    ["encrypt", "decrypt"]
+                );
+
+                document.getElementById('chat-input-area').style.display = 'flex';
+                document.getElementById('crypto-badge').style.display = 'inline';
+
+                const hashes = [mySession.u, peerHash].sort();
+                currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+
+                db.ref('rooms').off();
+                db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
+                    const msg = snapMsg.val();
+                    let decryptedText = "[Ошибка дешифровки]";
+                    try {
+                        const str = atob(msg.d);
+                        const combined = new Uint8Array(str.length);
+                        for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
+                        const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
+                        decryptedText = new TextDecoder().decode(decrypted);
+                    } catch(e) { console.error("Decryption failed", e); }
+
+                    const isMe = msg.s === mySession.u;
+                    const div = document.createElement('div');
+                    div.className = `msg ${isMe ? 'you' : 'peer'}`;
+                    div.textContent = decryptedText;
+                    msgsContainer.appendChild(div);
+                    msgsContainer.scrollTop = msgsContainer.scrollHeight;
+                });
+
+            } catch (e) {
+                msgsContainer.innerHTML = '<div class="empty-state" style="color:#ff453a;">Критическая ошибка математики ключей.</div>';
+            }
         }
 
         document.getElementById('btn-send').addEventListener('click', async () => {
             const input = document.getElementById('msg-input');
             const text = input.value.trim();
-            if (!text || !currentRoomId) return;
+            if (!text || !currentRoomId || !currentRoomKey) return;
             input.value = '';
 
             const enc = new TextEncoder();
@@ -388,7 +409,6 @@
                 t: Date.now()
             });
         });
-        
         document.getElementById('msg-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') document.getElementById('btn-send').click();
         });
@@ -450,11 +470,9 @@
             
             const display = document.getElementById('invite-links-display');
             display.style.display = 'block';
-            display.innerHTML = "Разошлите одну из этих ссылок (все ведут в одну базу):<br><br>" + 
-                DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+            display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
         });
 
-        // Выход
         document.getElementById('btn-logout').onclick = () => {
             db.ref(`presence/${mySession.u}`).remove().then(() => {
                 localStorage.removeItem('ghost_session');
@@ -462,7 +480,6 @@
             });
         };
 
-        // СТАТЬ АДМИНОМ (F12)
         window.makeMeAdmin = function() {
             if(!mySession) return console.error("Сначала войдите!");
             mySession.isAdmin = true;
