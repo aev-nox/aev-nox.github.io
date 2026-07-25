@@ -7,7 +7,6 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,10 +18,11 @@
 
     <div id="view-invite" class="view auth-container">
         <div class="auth-box">
-            <h2>Активация доступа</h2>
+            <h2 id="auth-title">Активация доступа</h2>
+            <p id="auth-subtitle" style="font-size:0.85em; color:#8a8a93; text-align:center; margin-top:-5px;"></p>
             <input type="text" id="reg-username" placeholder="Логин">
-            <input type="password" id="reg-password" placeholder="Пароль">
-            <button id="btn-register">Генерировать ключи и войти</button>
+            <input type="password" id="reg-password" placeholder="Секретный пароль">
+            <button id="btn-register">Войти</button>
         </div>
     </div>
 
@@ -69,7 +69,7 @@
                         <th>Пользователь</th>
                         <th>Статус</th>
                         <th>Последний вход</th>
-                        <th>Лог IP адресов</th>
+                        <th>Лог IP</th>
                         <th>Действия</th>
                     </tr>
                 </thead>
@@ -78,14 +78,13 @@
 
             <div class="admin-card">
                 <h3>Создать новый инвайт</h3>
-                <p style="color:#8a8a93; font-size: 0.9em; margin-bottom: 10px;">Генерирует одноразовую ссылку для регистрации.</p>
+                <p style="color:#8a8a93; font-size: 0.9em; margin-bottom: 10px;">Генерирует ссылку доступа для нового пользователя.</p>
                 <button class="btn-sm" id="btn-generate-invite" style="background: #5e5ce6; font-size: 1em; padding: 10px 20px;">+ Сгенерировать доступ</button>
                 <div class="invite-links" id="invite-links-display" style="display:none;"></div>
             </div>
 
             <div class="admin-card">
                 <h3>🔑 Управление Мастер-Ссылкой Админа</h3>
-                <p style="color:#8a8a93; font-size: 0.9em;">Вы можете в любой момент сменить токен мастер-ссылки. Старая ссылка сразу станет выдавать 404.</p>
                 <div class="flex-row">
                     <input type="text" id="master-key-input" placeholder="Новый токен (например: MY-SECRET-KEY-777)">
                     <button class="btn-sm" id="btn-change-master-key" style="background:#ffd60a; color:#000; font-weight:bold; padding: 10px 15px;">Обновить</button>
@@ -95,5 +94,10 @@
         </div>
     </div>
 
-    <script src="js/crypto.js"></script>  <script src="js/config.js"></script>  <script src="js/router.js"></script>  <script src="js/chat.js"></script>    <script src="js/admin.js"></script>   </body>
+    <script src="js/crypto.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/router.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/admin.js"></script>
+</body>
 </html>
