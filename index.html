@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Ghost E2EE Chat</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
     <style>
         :root { 
             --bg-color: #0f0f11; 
@@ -22,11 +26,9 @@
         body { 
             background-color: var(--bg-color); color: var(--text-main); 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif; 
-            font-size: 15px; /* Вернули комфортный размер шрифта */
-            display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden;
+            font-size: 15px; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden;
         }
         
-        /* Расширенный контейнер для ПК (600px) */
         .app-container { 
             width: 100%; max-width: 600px; height: 100vh; 
             display: flex; flex-direction: column; background: var(--chat-bg); 
@@ -46,8 +48,9 @@
         .header-online { font-size: 0.85em; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
         .status-dot { width: 8px; height: 8px; background: var(--online); border-radius: 50%; box-shadow: 0 0 8px rgba(50, 215, 75, 0.5); }
         
-        .settings-btn { background: none; border: none; color: var(--text-muted); font-size: 1.3em; cursor: pointer; padding: 4px; transition: 0.2s; }
-        .settings-btn:hover { color: var(--text-main); }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .icon-btn { background: none; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 4px; transition: 0.2s; }
+        .icon-btn:hover { color: var(--text-main); }
 
         .settings-panel {
             position: absolute; top: 60px; right: 15px; background: #232329; border: 1px solid #33333d;
@@ -55,8 +58,6 @@
             box-shadow: 0 5px 20px rgba(0,0,0,0.6); width: 220px;
         }
         .settings-panel.active { display: flex; }
-        .settings-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9em;}
-        select { background: #18181d; color: var(--text-main); border: 1px solid #33333d; padding: 6px; border-radius: 8px; outline: none; }
         button.btn-danger { background: rgba(255, 69, 58, 0.1); color: var(--danger); border: 1px solid rgba(255, 69, 58, 0.3); cursor: pointer; width: 100%; font-weight: 600; padding: 8px; border-radius: 8px; transition: 0.2s;}
         button.btn-danger:hover { background: rgba(255, 69, 58, 0.2); }
 
@@ -66,19 +67,16 @@
             scroll-behavior: smooth;
         }
         
-        /* Стили сообщений с поддержкой многострочности */
         .msg { 
             max-width: 85%; padding: 8px 12px; border-radius: 14px; 
             line-height: 1.4; font-size: 0.95em; position: relative;
-            white-space: pre-wrap; /* СОХРАНЯЕТ ПЕРЕНОСЫ СТРОК */
-            word-wrap: break-word;
+            white-space: pre-wrap; word-wrap: break-word;
             display: flex; flex-direction: column;
         }
         .msg.system { align-self: center; background: transparent; color: var(--text-muted); font-size: 0.85em; text-align: center; margin: 8px 0; display: block; }
         .msg.you { align-self: flex-end; background: var(--bubble-me); color: #fff; border-bottom-right-radius: 4px; }
         .msg.peer { align-self: flex-start; background: var(--bubble-peer); color: var(--text-main); border-bottom-left-radius: 4px; }
         
-        /* Время сообщения */
         .msg-time {
             font-size: 0.75em; align-self: flex-end; margin-top: 4px; margin-bottom: -2px;
             opacity: 0.7; user-select: none;
@@ -90,7 +88,6 @@
             border-top: 1px solid #2c2c35; display: flex; gap: 10px; align-items: flex-end;
         }
         
-        /* Умное поле ввода (Textarea) */
         #input { 
             flex: 1; background: #18181d; border: 1px solid #2c2c35; color: var(--text-main); 
             padding: 12px 16px; border-radius: 20px; font-size: 1em; outline: none; transition: 0.2s;
@@ -114,20 +111,14 @@
                 <div class="header-title">👻 Ghost Chat</div>
                 <div class="header-online"><span class="status-dot"></span> <span id="online-count">1 в комнате</span></div>
             </div>
-            <button class="settings-btn" id="btn-settings">⚙️</button>
+            <div class="header-actions">
+                <button class="icon-btn" id="btn-sound" title="Вкл/Выкл звук">🔔</button>
+                <button class="icon-btn" id="btn-settings" title="Настройки">⚙️</button>
+            </div>
         </div>
 
         <div class="settings-panel" id="settings-panel">
-            <div class="settings-row">
-                <span>Очистка:</span>
-                <select id="ttl-select">
-                    <option value="0" selected>Никогда</option>
-                    <option value="3600">1 час</option>
-                    <option value="86400">24 часа</option>
-                    <option value="604800">7 дней</option>
-                </select>
-            </div>
-            <button class="btn-danger" id="btn-clear">🗑 Очистить сейчас</button>
+            <button class="btn-danger" id="btn-clear">🗑 Очистить чат у всех</button>
         </div>
 
         <div id="log"></div>
@@ -139,9 +130,22 @@
     </div>
 
     <script>
-        const UPSTASH_URL = "https://fine-lark-176654.upstash.io"; 
-        const UPSTASH_TOKEN = "gwAAAAAAArIOAAIJQHAxY2hhdF91c2VyKjrag5sLbqnSVK-WR01Esu152bwOPiM5oFjD2iNbHdmsbdfPOwuuwDXLEklHUWJJj7H2POQnd-SBC76cS2b7YQ"; 
+        // --- КОНФИГУРАЦИЯ FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
+            authDomain: "global-student-project.firebaseapp.com",
+            projectId: "global-student-project",
+            storageBucket: "global-student-project.firebasestorage.app",
+            messagingSenderId: "847057162581",
+            appId: "1:847057162581:web:a49a07368e7173871b1fdc",
+            // ⚠️ Убедись, что зашел в Realtime Database и взял точный URL базы:
+            databaseURL: "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app"
+        };
 
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Данные комнаты и пароль
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room') || 'ghost-room';
         let roomPassword = window.location.hash.substring(1);
@@ -155,18 +159,46 @@
         const inputEl = document.getElementById('input');
         const sendBtn = document.getElementById('btn-send');
         const settingsBtn = document.getElementById('btn-settings');
+        const soundBtn = document.getElementById('btn-sound');
         const settingsPanel = document.getElementById('settings-panel');
         const clearBtn = document.getElementById('btn-clear');
-        const ttlSelect = document.getElementById('ttl-select');
         const onlineCountEl = document.getElementById('online-count');
 
         const myId = Math.random().toString(36).substring(2, 8);
-        let processedIndex = 0;
         let cryptoKey = null;
-        let currentTTL = "0";
-        let pollTimer;
+        let soundEnabled = localStorage.getItem('ghost_sound') !== 'false';
+        const renderedMsgs = new Set();
 
-        // UI Логика
+        // UI Настройки Звука
+        function updateSoundUI() {
+            soundBtn.textContent = soundEnabled ? '🔔' : '🔕';
+        }
+        updateSoundUI();
+
+        soundBtn.onclick = () => {
+            soundEnabled = !soundEnabled;
+            localStorage.setItem('ghost_sound', soundEnabled);
+            updateSoundUI();
+        };
+
+        // Генерация звука "поп" через Web Audio API (0 байт файлов)
+        function playMessageSound() {
+            if (!soundEnabled) return;
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.start(); osc.stop(ctx.currentTime + 0.12);
+            } catch(e) {}
+        }
+
+        // Меню
         settingsBtn.onclick = () => settingsPanel.classList.toggle('active');
         document.addEventListener('click', (e) => {
             if(!settingsBtn.contains(e.target) && !settingsPanel.contains(e.target)) {
@@ -174,13 +206,12 @@
             }
         });
 
-        // Авто-расширение поля ввода
+        // Авто-рост поля ввода
         inputEl.addEventListener('input', function() {
             this.style.height = '46px';
             this.style.height = (this.scrollHeight) + 'px';
         });
 
-        // Форматирование времени (HH:MM)
         function formatTime(ts) {
             const d = new Date(ts);
             return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
@@ -194,7 +225,6 @@
             textSpan.textContent = text;
             msgDiv.appendChild(textSpan);
 
-            // Добавляем метку времени, если это не системное сообщение
             if (timestamp && type !== 'system') {
                 const timeSpan = document.createElement('span');
                 timeSpan.classList.add('msg-time');
@@ -206,7 +236,7 @@
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
-        // --- ВОЕННАЯ КРИПТОГРАФИЯ ---
+        // --- КРИПТОГРАФИЯ (AES-GCM) ---
         async function setupCrypto(password) {
             const enc = new TextEncoder();
             const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
@@ -216,7 +246,7 @@
             );
             inputEl.disabled = false;
             sendBtn.disabled = false;
-            printMsg("Криптографический канал защищен.", "system");
+            printMsg("Канал защищен шифрованием AES-GCM.", "system");
         }
 
         async function encryptMsg(text) {
@@ -238,134 +268,84 @@
             } catch(e) { return null; }
         }
 
-        // --- REST API ---
-        async function redisCmd(commandArray) {
-            try {
-                const res = await fetch(UPSTASH_URL, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(commandArray)
-                });
-                const data = await res.json();
-                return data.result;
-            } catch (e) { return null; }
+        // --- FIREBASE REALTIME WEBSOCKETS ---
+        function initFirebaseListeners() {
+            const roomRef = db.ref(`rooms/${roomId}`);
+            const messagesRef = roomRef.child('messages');
+            const presenceRef = roomRef.child('presence').child(myId);
+            const connectedRef = db.ref('.info/connected');
+
+            // 1. Онлайн Присутствие (Presence System)
+            connectedRef.on('value', (snap) => {
+                if (snap.val() === true) {
+                    presenceRef.onDisconnect().remove();
+                    presenceRef.set(true);
+                }
+            });
+
+            roomRef.child('presence').on('value', (snap) => {
+                const count = snap.numChildren() || 1;
+                onlineCountEl.textContent = `${count} в комнате`;
+            });
+
+            // 2. Подписка на сообщения в реальном времени (WebSocket Push)
+            messagesRef.on('child_added', async (snap) => {
+                const msgId = snap.key;
+                if (renderedMsgs.has(msgId)) return;
+                renderedMsgs.add(msgId);
+
+                const msg = snap.val();
+                const text = await decryptMsg(msg.d);
+                if (text !== null) {
+                    const isMe = msg.s === myId;
+                    printMsg(text, isMe ? 'you' : 'peer', msg.t);
+                    if (!isMe) playMessageSound();
+                }
+            });
+
+            // 3. Отслеживание очистки чата
+            messagesRef.on('value', (snap) => {
+                if (!snap.exists()) {
+                    logDiv.innerHTML = '';
+                    renderedMsgs.clear();
+                    printMsg("История чата очищена.", "system");
+                }
+            });
         }
 
-        // --- ОТПРАВКА СООБЩЕНИЙ ---
+        // Отправка сообщений
         async function sendMessage() {
             const text = inputEl.value.trim();
-            if (!text) return;
+            if (!text || !cryptoKey) return;
             
             inputEl.value = '';
-            inputEl.style.height = '46px'; // Сброс высоты поля
+            inputEl.style.height = '46px';
             
             const encryptedText = await encryptMsg(text);
-            
-            // Payload теперь содержит метку времени 't'
             const payload = { s: myId, d: encryptedText, t: Date.now() };
             
-            await redisCmd(["RPUSH", `chat:${roomId}`, JSON.stringify(payload)]);
-            
-            if (currentTTL !== "0") {
-                await redisCmd(["EXPIRE", `chat:${roomId}`, currentTTL]);
-            }
-            
-            fetchMessages();
+            db.ref(`rooms/${roomId}/messages`).push(payload);
         }
 
-        // Обработка Enter (отправка) и Shift+Enter (перенос строки)
         inputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); // Предотвращаем стандартный перенос строки
+                e.preventDefault();
                 sendMessage();
             }
         });
         sendBtn.addEventListener('click', sendMessage);
 
-        // --- СИНХРОНИЗАЦИЯ НАСТРОЕК (TTL) ---
-        async function updateTTL(newTTL, isLocalTrigger = false) {
-            currentTTL = newTTL;
-            ttlSelect.value = newTTL;
-            
-            if (isLocalTrigger) {
-                await redisCmd(["SET", `cfg:ttl:${roomId}`, newTTL]);
-                if (newTTL === "0") {
-                    await redisCmd(["PERSIST", `chat:${roomId}`]);
-                    printMsg("Автоочистка отключена.", "system");
-                } else {
-                    await redisCmd(["EXPIRE", `chat:${roomId}`, newTTL]);
-                    const hrs = newTTL / 3600;
-                    printMsg(`Автоочистка: ${hrs >= 24 ? hrs/24 + ' дн.' : hrs + ' ч.'}`, "system");
-                }
-            }
-        }
-        ttlSelect.addEventListener('change', (e) => updateTTL(e.target.value, true));
-
-        // --- ГЛАВНЫЙ ЦИКЛ ОПРОСА ---
-        async function fetchMessages() {
-            if (!cryptoKey) return;
-
-            // Heartbeat (Сигнал присутствия в КОМНАТЕ)
-            await redisCmd(["SET", `p:${roomId}:${myId}`, "1", "EX", 12]);
-
-            const [activeKeys, remoteTTL, items] = await Promise.all([
-                redisCmd(["KEYS", `p:${roomId}:*`]),
-                redisCmd(["GET", `cfg:ttl:${roomId}`]),
-                redisCmd(["LRANGE", `chat:${roomId}`, 0, -1])
-            ]);
-
-            // Обновляем счетчик "В КОМНАТЕ"
-            if (activeKeys && Array.isArray(activeKeys)) {
-                onlineCountEl.textContent = `${activeKeys.length} в комнате`;
-            }
-
-            if (remoteTTL !== null && remoteTTL !== currentTTL) updateTTL(remoteTTL, false);
-
-            if (!items || items.length === 0) {
-                if (processedIndex > 0) {
-                    logDiv.innerHTML = '';
-                    printMsg("История чата очищена.", "system");
-                    processedIndex = 0;
-                }
-                return;
-            }
-
-            // Читаем новые сообщения (Рендер с меткой времени)
-            for (let i = processedIndex; i < items.length; i++) {
-                const msg = JSON.parse(items[i]);
-                const decryptedText = await decryptMsg(msg.d);
-                if (decryptedText !== null) {
-                    // Передаем текст, тип (вы/собеседник) и время (msg.t)
-                    printMsg(decryptedText, msg.s === myId ? 'you' : 'peer', msg.t);
-                }
-            }
-            processedIndex = items.length;
-        }
-
-        // Адаптивный опрос базы
-        function startPolling(interval) {
-            if(pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(fetchMessages, interval);
-        }
-
-        document.addEventListener("visibilitychange", () => {
-            startPolling(document.visibilityState === 'visible' ? 2000 : 10000);
-        });
-
-        clearBtn.addEventListener('click', async () => {
-            if (confirm("Переписка будет уничтожена навсегда. Вы уверены?")) {
+        // Очистка чата у всех
+        clearBtn.addEventListener('click', () => {
+            if (confirm("Вы действительно хотите удалить всю переписку для всех?")) {
                 settingsPanel.classList.remove('active');
-                await redisCmd(["DEL", `chat:${roomId}`]);
-                logDiv.innerHTML = '';
-                processedIndex = 0;
-                printMsg("Вы очистили чат.", "system");
+                db.ref(`rooms/${roomId}/messages`).remove();
             }
         });
 
-        // Старт
+        // Запуск
         setupCrypto(roomPassword).then(() => {
-            fetchMessages();
-            startPolling(2000);
+            initFirebaseListeners();
         });
     </script>
 </body>
