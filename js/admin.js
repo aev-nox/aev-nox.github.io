@@ -21,20 +21,22 @@ function initAdminPanel() {
             let ipsHtml = '';
             if (data.ips) {
                 const sorted = Object.entries(data.ips).sort((a,b) => b[0] - a[0]).slice(0, 3);
-                ipsHtml = sorted.map(([ts, ipB64]) => `${decodeBase64(ipB64)} <span style="color:#666;font-size:0.8em">(${formatTime(Number(ts))})</span>`).join('<br>');
+                ipsHtml = sorted.map(([ts, ipB64]) => `${decodeBase64(ipB64)} <span style="color:#94a3b8;font-size:0.75em">(${formatTime(Number(ts))})</span>`).join('<br>');
             } else ipsHtml = 'Нет данных';
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><strong>${name}</strong><br><span style="font-size:0.7em;color:#666">${hash.substring(0,8)}...</span></td>
+                <td><strong>${escapeHTML(name)}</strong><br><span style="font-size:0.7em;color:#94a3b8;">${hash.substring(0,8)}...</span></td>
                 <td>${data.isBanned ? '⛔ Забанен' : (isOnline ? '🟢 Онлайн' : '⚪ Оффлайн')}</td>
                 <td>${formatTime(data.lastSeen)}</td>
-                <td style="font-family:monospace; font-size:0.9em;">${ipsHtml}</td>
+                <td style="font-family:monospace; font-size:0.85em;">${ipsHtml}</td>
                 <td class="action-btns">
                     ${data.isBanned 
                         ? `<button class="btn-unban" onclick="toggleBan('${hash}', false)">Разбанить</button>` 
                         : `<button class="btn-ban" onclick="toggleBan('${hash}', true)">Забанить</button>`}
-                    <button class="btn-sm" style="background:#5e5ce6;" onclick="regenerateUserLink('${hash}')">🔄 Перегенерировать ссылку</button>
+                    <button class="btn-edit" onclick="editUser('${hash}', '${escapeHTML(name)}')">✏️ Имя</button>
+                    <button class="btn-sm" style="background:#6366f1;" onclick="regenerateUserLink('${hash}')">🔄 Ссылка</button>
+                    <button class="btn-delete" onclick="deleteUserCompletely('${hash}')">❌ Удалить</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -43,19 +45,30 @@ function initAdminPanel() {
 }
 
 window.toggleBan = async function(userHash, state) {
-    if(confirm(state ? "Точно забанить? Его выкинет мгновенно." : "Разбанить пользователя?")) {
+    if(confirm(state ? "Заблокировать пользователя?" : "Разблокировать пользователя?")) {
         await db.ref(`users/${userHash}/isBanned`).set(state);
     }
 };
 
-// Перегенерация новой персональной ссылки для пользователя
-window.regenerateUserLink = async function(userHash) {
-    if(!confirm("Старая ссылка пользователя станет недействительной (404). Выдать новую?")) return;
+// Изменение имени пользователя
+window.editUser = async function(userHash, currentName) {
+    const newName = prompt("Введите новое имя для пользователя:", currentName);
+    if (newName && newName.trim().length >= 2) {
+        await db.ref(`users/${userHash}/n`).set(encodeBase64(newName.trim()));
+        alert("Имя пользователя обновлено!");
+    }
+};
 
-    const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-    const hashedToken = await sha256(rawToken);
+// Полное удаление аккаунта
+window.deleteUserCompletely = async function(userHash) {
+    if (!confirm("⚠️ ВНИМАНИЕ: Аккаунт будет удален навсегда! Продолжить?")) return;
 
-    // Удаляем старые инвайты этого юзера
+    // Стираем профиль и присутствие
+    await db.ref(`users/${userHash}`).remove();
+    await db.ref(`presence/${userHash}`).remove();
+    await db.ref(`admins/${userHash}`).remove();
+
+    // Удаляем все инвайты юзера
     const invitesSnap = await db.ref('invites').once('value');
     invitesSnap.forEach(child => {
         if (child.val().userHash === userHash) {
@@ -63,7 +76,22 @@ window.regenerateUserLink = async function(userHash) {
         }
     });
 
-    // Создаем новый привязанный инвайт
+    alert("Пользователь полностью удален из базы данных.");
+};
+
+window.regenerateUserLink = async function(userHash) {
+    if(!confirm("Старая ссылка станет 404. Выдать новую?")) return;
+
+    const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+    const hashedToken = await sha256(rawToken);
+
+    const invitesSnap = await db.ref('invites').once('value');
+    invitesSnap.forEach(child => {
+        if (child.val().userHash === userHash) {
+            db.ref(`invites/${child.key}`).remove();
+        }
+    });
+
     await db.ref(`invites/${hashedToken}`).set({
         userHash: userHash,
         registered: true,
@@ -72,10 +100,9 @@ window.regenerateUserLink = async function(userHash) {
 
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    display.innerHTML = `✅ Ссылка пользователя обновлена! Отправьте ему:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    display.innerHTML = `✅ Ссылка обновлена! Отправьте пользователю:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 };
 
-// Создание чистого инвайта для нового юзера
 document.getElementById('btn-generate-invite').addEventListener('click', async () => {
     const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
     const hashedToken = await sha256(rawToken);
@@ -86,7 +113,6 @@ document.getElementById('btn-generate-invite').addEventListener('click', async (
     display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 });
 
-// Обновление Мастер-Ключа Админа
 document.getElementById('btn-change-master-key').addEventListener('click', async () => {
     const newToken = document.getElementById('master-key-input').value.trim();
     if (newToken.length < 6) return alert("Токен должен быть не менее 6 символов!");
@@ -95,8 +121,8 @@ document.getElementById('btn-change-master-key').addEventListener('click', async
     await db.ref('admin_master_hash').set(newHash);
     
     const statusDiv = document.getElementById('master-key-status');
-    statusDiv.style.color = '#32d74b';
-    statusDiv.innerHTML = `✅ Мастер-ключ обновлен! Ваша новая ссылка админа:<br><strong>${window.location.origin}${window.location.pathname}#/root-key/${newToken}</strong>`;
+    statusDiv.style.color = '#22c55e';
+    statusDiv.innerHTML = `✅ Мастер-ключ обновлен! Новая ссылка админа:<br><strong>${window.location.origin}${window.location.pathname}#/root-key/${newToken}</strong>`;
     document.getElementById('master-key-input').value = '';
 });
 
