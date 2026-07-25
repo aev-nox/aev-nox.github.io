@@ -1,3 +1,4 @@
+// Настройка базы и глобальные константы
 const firebaseConfig = {
     apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
     authDomain: "global-student-project.firebaseapp.com",
@@ -13,7 +14,7 @@ const DOMAINS = [
     "https://my-secret-domain.com/"
 ];
 
-// Обновленный длинный мастер-токен по умолчанию
+// Дефолтная ссылка-мастер (можно сменить в админке)
 const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-KEY-8f3a9b1c7d2e4f5a";
 
 async function ensureMasterKeyExists() {
@@ -24,3 +25,10 @@ async function ensureMasterKeyExists() {
     }
 }
 ensureMasterKeyExists();
+
+// Глобальная функция проверки прав
+async function isRealAdmin(userHash) {
+    if (!userHash) return false;
+    const snap = await db.ref(`admins/${userHash}`).once('value');
+    return snap.exists() && snap.val() === true;
+}
