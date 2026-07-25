@@ -1,4 +1,4 @@
-/* ПРОФЕССИОНАЛЬНАЯ ЦВЕТОВАЯ ПАЛИТРА (Slate / Indigo) */
+/* Профессиональная цветовая палитра Slate / Indigo */
 :root {
     --bg-main: #0f172a;
     --bg-surface: #1e293b;
@@ -12,23 +12,20 @@
     --success: #22c55e;
 }
 
-/* БАЗОВЫЕ НАСТРОЙКИ */
 body, html { margin: 0; padding: 0; height: 100vh; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 body { background-color: #ffffff; color: #000; }
 
-/* 404 СТРАНИЦА */
 #view-404 { text-align: center; padding-top: 10vh; }
 #view-404 h1 { font-size: 2em; margin-bottom: 10px; }
 #view-404 p { color: #666; }
 
-/* ТЕМА ПРИЛОЖЕНИЯ И УПРАВЛЕНИЕ ВИДАМИ */
 .app-theme { background-color: var(--bg-main); color: var(--text-primary); }
 
 .view { display: none !important; width: 100vw; height: 100vh; box-sizing: border-box; }
 .view.active { display: block !important; }
 .view.active-flex { display: flex !important; justify-content: center; align-items: center; }
 
-/* АВТОРИЗАЦИЯ */
+/* Авторизация */
 .auth-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
 .auth-box { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; width: 90%; max-width: 360px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
 .auth-box h2 { margin: 0; text-align: center; color: var(--accent); }
@@ -37,10 +34,8 @@ body { background-color: #ffffff; color: #000; }
 .auth-box button { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; }
 .auth-box button:hover { background: var(--accent-hover); }
 
-/* ДАШБОРД (ГЛАВНЫЙ ЭКРАН) */
-.dashboard { width: 100%; max-width: 1400px; height: 100vh; display: flex; background: var(--bg-main); border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); }
-
-/* ЛЕВАЯ ПАНЕЛЬ (КОНТАКТЫ) */
+/* Дашборд */
+.dashboard { width: 100%; max-width: 1400px; height: 100vh; display: flex; background: var(--bg-main); border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); margin: 0 auto; }
 .sidebar { width: 320px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: var(--bg-surface); flex-shrink: 0; }
 .sidebar-header { padding: 15px; background: #182234; border-bottom: 1px solid var(--border-color); }
 #my-name-display { font-weight: bold; font-size: 1.1em; margin-bottom: 8px; color: var(--text-primary); }
@@ -56,12 +51,11 @@ body { background-color: #ffffff; color: #000; }
 .contact-name { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .last-seen { font-size: 0.75em; color: var(--text-secondary); }
 
-/* ПРАВАЯ ПАНЕЛЬ (ЧАТ ЗОНА) */
+/* Чат зона */
 .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); position: relative; min-width: 0; }
 .chat-header { padding: 15px 20px; background: var(--bg-surface); border-bottom: 1px solid var(--border-color); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
 #crypto-badge { font-size: 0.8em; color: var(--success); background: rgba(34, 197, 94, 0.1); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(34, 197, 94, 0.2); }
 
-/* БЛОКИ СООБЩЕНИЙ */
 .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 
 .msg { 
@@ -77,17 +71,10 @@ body { background-color: #ffffff; color: #000; }
 .msg.you { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 2px; }
 .msg.peer { align-self: flex-start; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color); border-bottom-left-radius: 2px; }
 
-.msg-text {
-    line-height: 1.5; 
-    word-break: break-word; 
-    white-space: pre-wrap; 
-    font-size: 0.95em;
-}
-
+.msg-text { line-height: 1.5; word-break: break-word; white-space: pre-wrap; font-size: 0.95em; }
 .msg-footer { display: flex; justify-content: flex-end; align-items: center; }
 .msg-time { font-size: 0.7em; opacity: 0.7; user-select: none; }
 
-/* ПОЛЕ ВВОДА */
 .chat-input-container { padding: 15px; background: var(--bg-surface); border-top: 1px solid var(--border-color); display: flex; gap: 10px; align-items: flex-end; }
 .chat-input-container textarea { flex: 1; background: var(--bg-main); border: 1px solid var(--border-color); color: #fff; padding: 12px 15px; border-radius: 10px; outline: none; font-family: inherit; font-size: 0.95em; resize: none; max-height: 120px; }
 .chat-input-container button { background: var(--accent); color: white; border: none; width: 44px; height: 44px; border-radius: 10px; cursor: pointer; font-size: 1.1em; flex-shrink: 0; transition: 0.2s; }
@@ -95,13 +82,13 @@ body { background-color: #ffffff; color: #000; }
 
 .empty-state { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--text-secondary); font-size: 1.1em; text-align: center; padding: 20px; flex-direction: column; }
 
-/* КНОПКИ УПРАВЛЕНИЯ */
+/* Кнопки */
 button.btn-sm { background: var(--bg-hover); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85em; transition: 0.2s; }
 button.btn-sm:hover { opacity: 0.85; }
 button.logout { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
 button.admin-btn { background: #f59e0b; color: #000; font-weight: bold; display: none; }
 
-/* ПАНЕЛЬ АДМИНИСТРАТОРА */
+/* Админка */
 #view-admin { background: var(--bg-main); padding: 20px; box-sizing: border-box; overflow-y: auto; }
 .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; max-width: 1400px; margin: 0 auto 20px auto; }
 .admin-content { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
