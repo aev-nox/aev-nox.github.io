@@ -27,6 +27,12 @@
         <div class="auth-box">
             <h2 id="auth-title">Активация доступа</h2>
             <p id="auth-subtitle"></p>
+            
+            <div id="auth-warning" style="display: none; background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.4); padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: left; line-height: 1.4;">
+                <span style="color: #f87171; font-weight: bold; display: block; margin-bottom: 5px;">⚠️ КРИТИЧЕСКИ ВАЖНО</span>
+                <span style="color: #cbd5e1; font-size: 0.85em;">Сохраните вашу <b>персональную ссылку</b>, <b>логин</b> и <b>пароль</b> в надежном месте. Мы используем сквозное шифрование (Zero-Knowledge). При утере этих данных ваша переписка не сможет быть дешифрована даже администратором.</span>
+            </div>
+
             <input type="text" id="reg-username" placeholder="Логин">
             <input type="password" id="reg-password" placeholder="Секретный пароль">
             <button id="btn-register">Войти</button>
