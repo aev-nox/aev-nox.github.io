@@ -26,7 +26,6 @@ async function initDashboard() {
         }
     });
 
-    // Kill switch: Бан
     db.ref(`users/${mySession.u}/isBanned`).on('value', (snap) => {
         if (snap.val() === true) {
             localStorage.removeItem('ghost_session');
@@ -34,16 +33,14 @@ async function initDashboard() {
         }
     });
 
-    // Kill switch: Сброс пароля админом
     db.ref(`users/${mySession.u}/ph`).on('value', (snap) => {
         if (snap.val() === null) {
-            alert("⚠️ Администратор сбросил ваши ключи безопасности. Требуется повторная авторизация и создание нового пароля.");
+            alert("⚠️ Администратор сбросил ваши ключи безопасности. Требуется повторная авторизация.");
             localStorage.removeItem('ghost_session');
             window.location.hash = ''; window.location.reload();
         }
     });
 
-    // Kill switch: Сброс активной ссылки
     let initialLoadLink = true;
     db.ref(`users/${mySession.u}/linkRevokedAt`).on('value', (snap) => {
         if (initialLoadLink) { initialLoadLink = false; return; }
@@ -98,22 +95,28 @@ async function openChat(peerHash, peerName) {
     document.getElementById('chat-header-name').textContent = escapeHTML(peerName);
     const msgsContainer = document.getElementById('messages-container');
     msgsContainer.innerHTML = '';
+    
     document.getElementById('chat-input-area').style.display = 'none';
     document.getElementById('crypto-badge').style.display = 'none';
+    document.getElementById('chat-controls').style.display = 'none';
 
     const hashes = [mySession.u, peerHash].sort();
     currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
 
-    // Динамический пересчет ключей собеседника
+    // ИСПРАВЛЕНИЕ ДУБЛИРОВАНИЯ: Отписываемся от старой ветки сообщений
+    db.ref(`rooms/${currentRoomId}/messages`).off();
+
+    // Слушатель публичного ключа собеседника
     if (window.currentPeerPkRef) window.currentPeerPkRef.off();
     window.currentPeerPkRef = db.ref(`users/${peerHash}/pk`);
     
     window.currentPeerPkRef.on('value', async (snap) => {
         const peerPubJwk = snap.val();
         if (!peerPubJwk) {
-            msgsContainer.innerHTML = '<div class="empty-state">У пользователя сброшены ключи шифрования. Ожидание генерации...</div>';
+            msgsContainer.innerHTML = '<div class="empty-state">У пользователя сброшены ключи шифрования.</div>';
             document.getElementById('chat-input-area').style.display = 'none';
             document.getElementById('crypto-badge').style.display = 'none';
+            document.getElementById('chat-controls').style.display = 'none';
             return;
         }
 
@@ -130,17 +133,33 @@ async function openChat(peerHash, peerName) {
             );
 
             document.getElementById('chat-input-area').style.display = 'flex';
-            document.getElementById('crypto-badge').style.display = 'inline';
+            document.getElementById('crypto-badge').style.display = 'inline-block';
+            document.getElementById('chat-controls').style.display = 'flex';
         } catch (e) {
             console.error("Ошибка обновления ключа ECDH", e);
         }
     });
 
-    db.ref('rooms').off(); 
+    // Слушатель настроек автоочистки комнаты
+    db.ref(`rooms/${currentRoomId}/ttl`).on('value', (snap) => {
+        const ttl = snap.val() || "0";
+        document.getElementById('auto-clean-select').value = ttl;
+    });
+
+    // Слушатель сообщений
     db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
         const msg = snapMsg.val();
+        const msgKey = snapMsg.key;
+
+        // Проверка правила автоочистки
+        const ttlSnap = await db.ref(`rooms/${currentRoomId}/ttl`).once('value');
+        const ttlVal = Number(ttlSnap.val() || 0);
+        if (ttlVal > 0 && msg.t && (Date.now() - msg.t > ttlVal)) {
+            db.ref(`rooms/${currentRoomId}/messages/${msgKey}`).remove();
+            return;
+        }
+
         let decryptedText = "[Ошибка дешифровки]";
-        
         try {
             const str = atob(msg.d);
             const combined = new Uint8Array(str.length);
@@ -154,7 +173,6 @@ async function openChat(peerHash, peerName) {
 
         const div = document.createElement('div');
         div.className = `msg ${isMe ? 'you' : 'peer'}`;
-        
         div.innerHTML = `
             <div class="msg-text">${escapeHTML(decryptedText)}</div>
             <div class="msg-footer">
@@ -165,7 +183,29 @@ async function openChat(peerHash, peerName) {
         msgsContainer.appendChild(div);
         msgsContainer.scrollTop = msgsContainer.scrollHeight;
     });
+
+    // Обработка удаления всех сообщений в реальном времени
+    db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
+        if (!snap.exists()) {
+            msgsContainer.innerHTML = '';
+        }
+    });
 }
+
+// Изменение таймера автоочистки
+document.getElementById('auto-clean-select').addEventListener('change', async (e) => {
+    if (!currentRoomId) return;
+    const val = e.target.value;
+    await db.ref(`rooms/${currentRoomId}/ttl`).set(val);
+});
+
+// Кнопка «Очистить чат» (у обоих пользователей)
+document.getElementById('btn-clear-chat').addEventListener('click', async () => {
+    if (!currentRoomId) return;
+    if (confirm("⚠️ Вы уверены, что хотите полностью очистить историю сообщений? Переписка будет удалена У ОБОИХ участников.")) {
+        await db.ref(`rooms/${currentRoomId}/messages`).remove();
+    }
+});
 
 const msgInput = document.getElementById('msg-input');
 msgInput.addEventListener('keydown', (e) => {
