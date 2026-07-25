@@ -7,19 +7,15 @@ async function fetchAndLogIP(userHash) {
 }
 
 async function initDashboard() {
-    // Отображаем актуальное имя пользователя
     document.getElementById('my-name-display').textContent = mySession.name;
     
-    // Проверка статуса админа из Firebase для отображения кнопки
     const realAdmin = await isRealAdmin(mySession.u);
     if (realAdmin) {
         document.getElementById('btn-open-admin').style.display = 'inline-block';
     }
 
-    // Собираем IP
     fetchAndLogIP(mySession.u);
 
-    // Система присутствия
     const myPresenceRef = db.ref(`presence/${mySession.u}`);
     const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
     db.ref('.info/connected').on('value', (snap) => {
@@ -30,7 +26,7 @@ async function initDashboard() {
         }
     });
 
-    // Kill switch (Бан)
+    // Kill switch: Бан
     db.ref(`users/${mySession.u}/isBanned`).on('value', (snap) => {
         if (snap.val() === true) {
             localStorage.removeItem('ghost_session');
@@ -38,12 +34,31 @@ async function initDashboard() {
         }
     });
 
-    // Отрисовка списка контактов
+    // Kill switch: Сброс пароля админом
+    db.ref(`users/${mySession.u}/ph`).on('value', (snap) => {
+        if (snap.val() === null) {
+            alert("⚠️ Администратор сбросил ваши ключи безопасности. Требуется повторная авторизация и создание нового пароля.");
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
+        }
+    });
+
+    // Kill switch: Сброс активной ссылки
+    let initialLoadLink = true;
+    db.ref(`users/${mySession.u}/linkRevokedAt`).on('value', (snap) => {
+        if (initialLoadLink) { initialLoadLink = false; return; }
+        if (snap.exists()) {
+            alert("⚠️ Ваша персональная ссылка была обновлена. Доступ по старой сессии закрыт.");
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
+        }
+    });
+
     db.ref('users').on('value', (snap) => {
         const list = document.getElementById('contacts-list');
         list.innerHTML = '';
         snap.forEach(child => {
-            if (child.key === mySession.u) return; // Себя не выводим
+            if (child.key === mySession.u) return;
             const data = child.val();
             if (data.isBanned) return;
 
@@ -64,7 +79,6 @@ async function initDashboard() {
         });
     });
 
-    // Отслеживание онлайна контактов
     db.ref('presence').on('value', (snap) => {
         document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('online'));
         snap.forEach(child => {
@@ -87,82 +101,73 @@ async function openChat(peerHash, peerName) {
     document.getElementById('chat-input-area').style.display = 'none';
     document.getElementById('crypto-badge').style.display = 'none';
 
-    // Получаем публичный ключ собеседника
-    const snap = await db.ref(`users/${peerHash}/pk`).once('value');
-    const peerPubJwk = snap.val();
+    const hashes = [mySession.u, peerHash].sort();
+    currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
 
-    if (!peerPubJwk) {
-        msgsContainer.innerHTML = '<div class="empty-state">У пользователя нет ключей шифрования.</div>';
-        return;
-    }
+    // Динамический пересчет ключей собеседника
+    if (window.currentPeerPkRef) window.currentPeerPkRef.off();
+    window.currentPeerPkRef = db.ref(`users/${peerHash}/pk`);
+    
+    window.currentPeerPkRef.on('value', async (snap) => {
+        const peerPubJwk = snap.val();
+        if (!peerPubJwk) {
+            msgsContainer.innerHTML = '<div class="empty-state">У пользователя сброшены ключи шифрования. Ожидание генерации...</div>';
+            document.getElementById('chat-input-area').style.display = 'none';
+            document.getElementById('crypto-badge').style.display = 'none';
+            return;
+        }
 
-    try {
-        // Диффи-Хеллман (ECDH) выработка общего ключа
-        const peerPubKey = await crypto.subtle.importKey("jwk", peerPubJwk, {name: "ECDH", namedCurve: "P-256"}, true, []);
-        const myPrivKey = await crypto.subtle.importKey("jwk", mySession.priv, {name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
+        try {
+            const peerPubKey = await crypto.subtle.importKey("jwk", peerPubJwk, {name: "ECDH", namedCurve: "P-256"}, true, []);
+            const myPrivKey = await crypto.subtle.importKey("jwk", mySession.priv, {name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
 
-        currentRoomKey = await crypto.subtle.deriveKey(
-            {name: "ECDH", public: peerPubKey},
-            myPrivKey,
-            {name: "AES-GCM", length: 256},
-            false,
-            ["encrypt", "decrypt"]
-        );
+            currentRoomKey = await crypto.subtle.deriveKey(
+                {name: "ECDH", public: peerPubKey},
+                myPrivKey,
+                {name: "AES-GCM", length: 256},
+                false,
+                ["encrypt", "decrypt"]
+            );
 
-        document.getElementById('chat-input-area').style.display = 'flex';
-        document.getElementById('crypto-badge').style.display = 'inline';
+            document.getElementById('chat-input-area').style.display = 'flex';
+            document.getElementById('crypto-badge').style.display = 'inline';
+        } catch (e) {
+            console.error("Ошибка обновления ключа ECDH", e);
+        }
+    });
 
-        const hashes = [mySession.u, peerHash].sort();
-        currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+    db.ref('rooms').off(); 
+    db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
+        const msg = snapMsg.val();
+        let decryptedText = "[Ошибка дешифровки]";
+        
+        try {
+            const str = atob(msg.d);
+            const combined = new Uint8Array(str.length);
+            for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
+            const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
+            decryptedText = new TextDecoder().decode(decrypted);
+        } catch(e) {}
 
-        db.ref('rooms').off(); // Отписываемся от старой комнаты
-        db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
-            const msg = snapMsg.val();
-            let decryptedText = "[Ошибка дешифровки]";
-            
-            try {
-                const str = atob(msg.d);
-                const combined = new Uint8Array(str.length);
-                for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
-                const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
-                decryptedText = new TextDecoder().decode(decrypted);
-            } catch(e) {
-                console.error("Ошибка дешифровки сообщения");
-            }
+        const isMe = msg.s === mySession.u;
+        const msgTime = msg.t ? new Date(msg.t).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) : '';
 
-            const isMe = msg.s === mySession.u;
-            const msgTime = msg.t ? new Date(msg.t).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) : '';
-
-            const div = document.createElement('div');
-            div.className = `msg ${isMe ? 'you' : 'peer'}`;
-            
-            // НОВАЯ верстка для сообщения (разделен текст и время)
-            div.innerHTML = `
-                <div class="msg-text">${escapeHTML(decryptedText)}</div>
-                <div class="msg-footer">
-                    <span class="msg-time">${msgTime}</span>
-                </div>
-            `;
-            
-            msgsContainer.appendChild(div);
-            msgsContainer.scrollTop = msgsContainer.scrollHeight;
-        });
-
-    } catch (e) {
-        msgsContainer.innerHTML = '<div class="empty-state" style="color:#ef4444;">Ошибка инициализации криптографических ключей.</div>';
-    }
-}
-
-// Защита от XSS
-function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-    );
+        const div = document.createElement('div');
+        div.className = `msg ${isMe ? 'you' : 'peer'}`;
+        
+        div.innerHTML = `
+            <div class="msg-text">${escapeHTML(decryptedText)}</div>
+            <div class="msg-footer">
+                <span class="msg-time">${msgTime}</span>
+            </div>
+        `;
+        
+        msgsContainer.appendChild(div);
+        msgsContainer.scrollTop = msgsContainer.scrollHeight;
+    });
 }
 
 const msgInput = document.getElementById('msg-input');
-
-// Shift+Enter - перенос строки, Enter - отправка
 msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -170,11 +175,10 @@ msgInput.addEventListener('keydown', (e) => {
     }
 });
 
-// Логика отправки
 document.getElementById('btn-send').addEventListener('click', async () => {
     const text = msgInput.value.trim();
     if (!text || !currentRoomId || !currentRoomKey) return;
-    msgInput.value = ''; // Очищаем инпут сразу
+    msgInput.value = '';
 
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12));
