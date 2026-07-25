@@ -21,6 +21,7 @@ function showView(viewName) {
 async function handleRoute() {
     const hash = window.location.hash;
 
+    // 1. Проверка Мастер-Ключа Админа
     if (hash.startsWith('#/root-key/')) {
         const token = hash.replace('#/root-key/', '');
         const tokenHash = await sha256(token);
@@ -35,7 +36,7 @@ async function handleRoute() {
             } else {
                 alert("👑 Ключ Админа принят! Зарегистрируйтесь, чтобы открыть панель.");
                 sessionStorage.setItem('pending_admin', 'true');
-                window.location.hash = '';
+                showView('invite'); // Открываем форму регистрации!
             }
             return;
         } else {
@@ -44,23 +45,28 @@ async function handleRoute() {
         }
     }
 
+    // 2. Защита путей для авторизованных
     if (mySession && hash !== '#/app' && hash !== '#/admin') { 
         window.location.hash = '#/app'; 
         return; 
     }
 
+    // 3. Инвайты
     if (hash.startsWith('#/inv/')) {
         const token = hash.replace('#/inv/', '');
         currentInviteHash = await sha256(token);
         const snap = await db.ref(`invites/${currentInviteHash}`).once('value');
         if (snap.exists()) showView('invite'); else showView('404');
     } 
+    // 4. Главный чат
     else if (hash === '#/app') {
         if (mySession) { showView('app'); initDashboard(); } else window.location.hash = '';
     }
+    // 5. Панель Админа
     else if (hash === '#/admin') {
         if (mySession && mySession.isAdmin) { showView('admin'); initAdminPanel(); } else window.location.hash = '#/app';
     }
+    // 6. Чужаки -> 404
     else showView('404');
 }
 
