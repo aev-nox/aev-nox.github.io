@@ -7,16 +7,19 @@ async function fetchAndLogIP(userHash) {
 }
 
 async function initDashboard() {
+    // Отображаем актуальное имя пользователя
     document.getElementById('my-name-display').textContent = mySession.name;
     
-    // Показываем кнопку Админа, только если реальный админ в базе
+    // Проверка статуса админа из Firebase для отображения кнопки
     const realAdmin = await isRealAdmin(mySession.u);
     if (realAdmin) {
         document.getElementById('btn-open-admin').style.display = 'inline-block';
     }
 
+    // Собираем IP
     fetchAndLogIP(mySession.u);
 
+    // Система присутствия
     const myPresenceRef = db.ref(`presence/${mySession.u}`);
     const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
     db.ref('.info/connected').on('value', (snap) => {
@@ -27,6 +30,7 @@ async function initDashboard() {
         }
     });
 
+    // Kill switch (Бан)
     db.ref(`users/${mySession.u}/isBanned`).on('value', (snap) => {
         if (snap.val() === true) {
             localStorage.removeItem('ghost_session');
@@ -34,11 +38,12 @@ async function initDashboard() {
         }
     });
 
+    // Отрисовка списка контактов
     db.ref('users').on('value', (snap) => {
         const list = document.getElementById('contacts-list');
         list.innerHTML = '';
         snap.forEach(child => {
-            if (child.key === mySession.u) return;
+            if (child.key === mySession.u) return; // Себя не выводим
             const data = child.val();
             if (data.isBanned) return;
 
@@ -50,7 +55,7 @@ async function initDashboard() {
             div.innerHTML = `
                 <div class="status-dot" id="status-${child.key}"></div>
                 <div style="flex:1; min-width: 0;">
-                    <div class="contact-name">${name}</div>
+                    <div class="contact-name">${escapeHTML(name)}</div>
                     <div class="last-seen">Был: ${formatTime(data.lastSeen)}</div>
                 </div>
             `;
@@ -59,6 +64,7 @@ async function initDashboard() {
         });
     });
 
+    // Отслеживание онлайна контактов
     db.ref('presence').on('value', (snap) => {
         document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('online'));
         snap.forEach(child => {
@@ -75,12 +81,13 @@ async function openChat(peerHash, peerName) {
     const targetContact = document.getElementById(`contact-${peerHash}`);
     if (targetContact) targetContact.classList.add('active');
     
-    document.getElementById('chat-header-name').textContent = peerName;
+    document.getElementById('chat-header-name').textContent = escapeHTML(peerName);
     const msgsContainer = document.getElementById('messages-container');
     msgsContainer.innerHTML = '';
     document.getElementById('chat-input-area').style.display = 'none';
     document.getElementById('crypto-badge').style.display = 'none';
 
+    // Получаем публичный ключ собеседника
     const snap = await db.ref(`users/${peerHash}/pk`).once('value');
     const peerPubJwk = snap.val();
 
@@ -90,6 +97,7 @@ async function openChat(peerHash, peerName) {
     }
 
     try {
+        // Диффи-Хеллман (ECDH) выработка общего ключа
         const peerPubKey = await crypto.subtle.importKey("jwk", peerPubJwk, {name: "ECDH", namedCurve: "P-256"}, true, []);
         const myPrivKey = await crypto.subtle.importKey("jwk", mySession.priv, {name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
 
@@ -107,17 +115,20 @@ async function openChat(peerHash, peerName) {
         const hashes = [mySession.u, peerHash].sort();
         currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
 
-        db.ref('rooms').off();
+        db.ref('rooms').off(); // Отписываемся от старой комнаты
         db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
             const msg = snapMsg.val();
             let decryptedText = "[Ошибка дешифровки]";
+            
             try {
                 const str = atob(msg.d);
                 const combined = new Uint8Array(str.length);
                 for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
                 const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
                 decryptedText = new TextDecoder().decode(decrypted);
-            } catch(e) {}
+            } catch(e) {
+                console.error("Ошибка дешифровки сообщения");
+            }
 
             const isMe = msg.s === mySession.u;
             const msgTime = msg.t ? new Date(msg.t).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) : '';
@@ -125,9 +136,9 @@ async function openChat(peerHash, peerName) {
             const div = document.createElement('div');
             div.className = `msg ${isMe ? 'you' : 'peer'}`;
             
-            // Форматированный вывод текста + время
+            // НОВАЯ верстка для сообщения (разделен текст и время)
             div.innerHTML = `
-                <div>${escapeHTML(decryptedText)}</div>
+                <div class="msg-text">${escapeHTML(decryptedText)}</div>
                 <div class="msg-footer">
                     <span class="msg-time">${msgTime}</span>
                 </div>
@@ -138,19 +149,20 @@ async function openChat(peerHash, peerName) {
         });
 
     } catch (e) {
-        msgsContainer.innerHTML = '<div class="empty-state" style="color:#ef4444;">Ошибка инициализации ключей.</div>';
+        msgsContainer.innerHTML = '<div class="empty-state" style="color:#ef4444;">Ошибка инициализации криптографических ключей.</div>';
     }
 }
 
+// Защита от XSS
 function escapeHTML(str) {
     return str.replace(/[&<>'"]/g, 
         tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
     );
 }
 
-// Отправка сообщений (Shift+Enter - новая строка, Enter - отправить)
 const msgInput = document.getElementById('msg-input');
 
+// Shift+Enter - перенос строки, Enter - отправка
 msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -158,16 +170,19 @@ msgInput.addEventListener('keydown', (e) => {
     }
 });
 
+// Логика отправки
 document.getElementById('btn-send').addEventListener('click', async () => {
     const text = msgInput.value.trim();
     if (!text || !currentRoomId || !currentRoomKey) return;
-    msgInput.value = '';
+    msgInput.value = ''; // Очищаем инпут сразу
 
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, currentRoomKey, enc.encode(text));
+    
     const combined = new Uint8Array(12 + encrypted.byteLength);
-    combined.set(iv, 0); combined.set(new Uint8Array(encrypted), 12);
+    combined.set(iv, 0); 
+    combined.set(new Uint8Array(encrypted), 12);
 
     db.ref(`rooms/${currentRoomId}/messages`).push({
         s: mySession.u,
