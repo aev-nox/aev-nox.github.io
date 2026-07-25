@@ -13,7 +13,9 @@ function showView(viewName) {
     Object.values(views).forEach(el => el.classList.remove('active', 'active-flex'));
     if(viewName !== '404') {
         document.body.classList.add('app-theme');
-        document.body.style = ""; // Сбрасываем стили nginx
+        document.body.style = ""; 
+    } else {
+        document.body.classList.remove('app-theme');
     }
     document.title = viewName === '404' ? "404 Not Found" : "Ghost Core";
     
@@ -27,16 +29,19 @@ function setupAuthUI(isLogin, username = "") {
     const subtitle = document.getElementById('auth-subtitle');
     const userInput = document.getElementById('reg-username');
     const btn = document.getElementById('btn-register');
+    const warningBox = document.getElementById('auth-warning');
 
     if (isLogin) {
         if (title) title.textContent = "Вход в систему";
         if (subtitle) subtitle.textContent = `Персональный канал: ${username}`;
+        if (warningBox) warningBox.style.display = "none";
         userInput.value = username;
         userInput.disabled = true;
         btn.textContent = "Войти в аккаунт";
     } else {
         if (title) title.textContent = "Активация доступа";
-        if (subtitle) subtitle.textContent = username ? "Регистрация Администратора" : "Первичная регистрация аккаунта";
+        if (subtitle) subtitle.textContent = username ? "Регистрация Администратора" : "Первичная регистрация";
+        if (warningBox) warningBox.style.display = "block";
         userInput.value = "";
         userInput.disabled = false;
         btn.textContent = "Зарегистрироваться и войти";
@@ -71,16 +76,9 @@ async function decryptPrivateKey(userHash, password, encryptedB64) {
     return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
-async function isRealAdmin(userHash) {
-    if (!userHash) return false;
-    const snap = await db.ref(`admins/${userHash}`).once('value');
-    return snap.exists() && snap.val() === true;
-}
-
 async function handleRoute() {
     const hash = window.location.hash;
 
-    // 1. Мастер-Ключ Админа
     if (hash.startsWith('#/root-key/')) {
         const token = hash.replace('#/root-key/', '');
         const tokenHash = await sha256(token);
@@ -146,59 +144,56 @@ async function handleRoute() {
 
 window.addEventListener('hashchange', handleRoute);
 
-// ЕДИНЫЙ ЦЕНТР АВТОРИЗАЦИИ
 document.getElementById('btn-register').addEventListener('click', async () => {
     const user = document.getElementById('reg-username').value.trim();
     const pass = document.getElementById('reg-password').value.trim();
     if (user.length < 2 || pass.length < 4) return alert("Логин от 2 символов, пароль от 4 символов!");
 
     const userHash = await sha256(user);
-    const passHash = await sha256(userHash + ":" + pass);
+    const passHash = await sha256(userHash + ":" + pass); // Соль отвязана от никнейма
 
-    const userSnap = await db.ref(`users/${userHash}`).once('value');
-
-    // СЦЕНАРИЙ А: ПОЛЬЗОВАТЕЛЬ УЖЕ СУЩЕСТВУЕТ (ВХОД)
-    if (userSnap.exists()) {
-        const userData = userSnap.val();
+    if (currentInviteData && currentInviteData.userHash) {
+        const targetUserHash = currentInviteData.userHash;
+        const targetPassHash = await sha256(targetUserHash + ":" + pass);
         
+        const userSnap = await db.ref(`users/${targetUserHash}`).once('value');
+        if (!userSnap.exists()) return alert("Ошибка: Аккаунт удален!");
+        
+        const userData = userSnap.val();
         if (userData.isBanned) return alert("⛔ Аккаунт заблокирован!");
 
-        // Проверка на сброс пароля админом
         if (!userData.ph) {
-            // Режим восстановления ключей после сброса
             const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
             const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
             const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
-            const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
+            const encryptedPrivKey = await encryptPrivateKey(targetUserHash, pass, privJwk);
 
-            await db.ref(`users/${userHash}`).update({ pk: pubJwk, epk: encryptedPrivKey, ph: passHash });
+            await db.ref(`users/${targetUserHash}`).update({ pk: pubJwk, epk: encryptedPrivKey, ph: targetPassHash });
             alert("🔑 Новый пароль установлен. Ключи перегенерированы.");
             
-            const isAdmin = await isRealAdmin(userHash);
-            mySession = { u: userHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
+            const isAdmin = await isRealAdmin(targetUserHash);
+            mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
             localStorage.setItem('ghost_session', JSON.stringify(mySession));
             window.location.hash = isAdmin ? '#/admin' : '#/app';
             return;
         }
 
-        // Обычный логин
-        if (userData.ph !== passHash) return alert("❌ Неверный пароль!");
+        if (userData.ph !== targetPassHash) return alert("❌ Неверный пароль!");
 
         let privJwk = null;
         try {
-            privJwk = await decryptPrivateKey(userHash, pass, userData.epk);
+            privJwk = await decryptPrivateKey(targetUserHash, pass, userData.epk);
         } catch(e) {
             return alert("❌ Ошибка дешифровки ключей. Проверьте пароль.");
         }
 
-        const isAdmin = await isRealAdmin(userHash);
-        mySession = { u: userHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
+        const isAdmin = await isRealAdmin(targetUserHash);
+        mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
         sessionStorage.removeItem('pending_admin');
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
     } 
-    // СЦЕНАРИЙ Б: НОВЫЙ ПОЛЬЗОВАТЕЛЬ (РЕГИСТРАЦИЯ)
     else {
         const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
         if (!currentInviteData && !isPendingAdmin) {
