@@ -19,7 +19,7 @@
     <div id="view-invite" class="view auth-container">
         <div class="auth-box">
             <h2 id="auth-title">Активация доступа</h2>
-            <p id="auth-subtitle" style="font-size:0.85em; color:#8a8a93; text-align:center; margin-top:-5px;"></p>
+            <p id="auth-subtitle"></p>
             <input type="text" id="reg-username" placeholder="Логин">
             <input type="password" id="reg-password" placeholder="Секретный пароль">
             <button id="btn-register">Войти</button>
@@ -31,9 +31,11 @@
             <div class="sidebar">
                 <div class="sidebar-header">
                     <div>
-                        <div id="my-name-display" style="font-weight:bold; margin-bottom: 5px;">Загрузка...</div>
-                        <button class="btn-sm logout" id="btn-logout">Выход</button>
-                        <button class="btn-sm admin-btn" id="btn-open-admin">⚙️ Админ</button>
+                        <div id="my-name-display">Загрузка...</div>
+                        <div class="btn-group">
+                            <button class="btn-sm logout" id="btn-logout">Выход</button>
+                            <button class="btn-sm admin-btn" id="btn-open-admin">⚙️ Админ</button>
+                        </div>
                     </div>
                 </div>
                 <div class="contacts-list" id="contacts-list"></div>
@@ -41,16 +43,16 @@
             <div class="chat-area">
                 <div class="chat-header">
                     <span id="chat-header-name">Выберите чат</span>
-                    <span id="crypto-badge" style="font-size: 0.8em; color: #32d74b; display:none;">🔒 ECDH E2EE Активен</span>
+                    <span id="crypto-badge" style="display:none;">🔒 ECDH E2EE Активен</span>
                 </div>
                 <div class="messages" id="messages-container">
                     <div class="empty-state">
-                        Секретный канал связи<br>
-                        <span style="font-size:0.7em; color:#666;">(Асимметричное E2EE шифрование)</span>
+                        Защищенный канал связи<br>
+                        <span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span>
                     </div>
                 </div>
-                <div class="chat-input" id="chat-input-area" style="display: none;">
-                    <input type="text" id="msg-input" placeholder="Сообщение...">
+                <div class="chat-input-container" id="chat-input-area" style="display: none;">
+                    <textarea id="msg-input" placeholder="Введите сообщение... (Shift+Enter для переноса)" rows="1"></textarea>
                     <button id="btn-send">➤</button>
                 </div>
             </div>
@@ -60,7 +62,7 @@
     <div id="view-admin" class="view">
         <div class="admin-header">
             <h2>⚙️ Панель Управления (Zero Trust C2)</h2>
-            <button class="btn-sm" id="btn-close-admin" style="background:#5e5ce6; font-size: 1em;">Вернуться в чат</button>
+            <button class="btn-sm" id="btn-close-admin" style="background:#6366f1;">Вернуться в чат</button>
         </div>
         <div class="admin-content">
             <table class="admin-table">
@@ -70,7 +72,7 @@
                         <th>Статус</th>
                         <th>Последний вход</th>
                         <th>Лог IP</th>
-                        <th>Действия</th>
+                        <th>Управление</th>
                     </tr>
                 </thead>
                 <tbody id="admin-users-list"></tbody>
@@ -78,8 +80,8 @@
 
             <div class="admin-card">
                 <h3>Создать новый инвайт</h3>
-                <p style="color:#8a8a93; font-size: 0.9em; margin-bottom: 10px;">Генерирует ссылку доступа для нового пользователя.</p>
-                <button class="btn-sm" id="btn-generate-invite" style="background: #5e5ce6; font-size: 1em; padding: 10px 20px;">+ Сгенерировать доступ</button>
+                <p style="color:#94a3b8; font-size: 0.9em; margin-bottom: 10px;">Генерирует ссылку доступа для нового пользователя.</p>
+                <button class="btn-sm" id="btn-generate-invite" style="background: #6366f1; padding: 10px 20px;">+ Сгенерировать доступ</button>
                 <div class="invite-links" id="invite-links-display" style="display:none;"></div>
             </div>
 
@@ -87,7 +89,7 @@
                 <h3>🔑 Управление Мастер-Ссылкой Админа</h3>
                 <div class="flex-row">
                     <input type="text" id="master-key-input" placeholder="Новый токен (например: MY-SECRET-KEY-777)">
-                    <button class="btn-sm" id="btn-change-master-key" style="background:#ffd60a; color:#000; font-weight:bold; padding: 10px 15px;">Обновить</button>
+                    <button class="btn-sm" id="btn-change-master-key" style="background:#f59e0b; color:#000; font-weight:bold;">Обновить</button>
                 </div>
                 <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
             </div>
