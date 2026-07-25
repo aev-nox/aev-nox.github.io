@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -18,15 +18,16 @@
         #view-404 h1 { font-size: 2em; margin-bottom: 10px; }
         #view-404 p { color: #666; }
 
-        /* ТЕМНАЯ ТЕМА */
+        /* ТЕМНАЯ ТЕМА ПРИЛОЖЕНИЯ */
         .app-theme { background-color: #0a0a0c; color: #f0f0f0; }
 
-        /* УПРАВЛЕНИЕ ОКНАМИ (!important) */
-        .view { display: none !important; width: 100vw; height: 100vh; }
+        /* БРОНЕБОЙНОЕ УПРАВЛЕНИЕ ОКНАМИ */
+        .view { display: none !important; width: 100vw; height: 100vh; box-sizing: border-box; }
         .view.active { display: block !important; }
         .view.active-flex { display: flex !important; justify-content: center; align-items: center; }
 
         /* Авторизация */
+        .auth-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
         .auth-box { background: #15151a; border: 1px solid #2c2c35; border-radius: 12px; padding: 30px; width: 90%; max-width: 350px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
         .auth-box h2 { margin: 0; text-align: center; color: #5e5ce6; }
         .auth-box input { background: #0a0a0c; border: 1px solid #33333d; color: #fff; padding: 12px; border-radius: 8px; outline: none; }
@@ -61,7 +62,7 @@
         .empty-state { flex: 1; display: flex; justify-content: center; align-items: center; color: #666; font-size: 1.2em; text-align: center; padding: 20px;}
 
         /* Кнопки */
-        button.btn-sm { background: #2c2c35; color: #fff; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8em;}
+        button.btn-sm { background: #2c2c35; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85em;}
         button.btn-sm:hover { background: #3a3a45; }
         button.logout { background: transparent; border: 1px solid #ff453a; color: #ff453a; }
         button.admin-btn { background: #ffd60a; color: #000; font-weight: bold; display: none; margin-top: 5px;}
@@ -69,7 +70,7 @@
         /* ПАНЕЛЬ АДМИНА */
         #view-admin { background: #0f0f13; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #2c2c35; padding-bottom: 15px; max-width: 1400px; margin: 0 auto 20px auto;}
-        .admin-content { max-width: 1400px; margin: 0 auto; }
+        .admin-content { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;}
         .admin-table { width: 100%; border-collapse: collapse; background: #15151a; border-radius: 8px; overflow: hidden; }
         .admin-table th, .admin-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #2c2c35; }
         .admin-table th { background: #1c1c24; color: #8a8a93; font-size: 0.9em; }
@@ -78,8 +79,12 @@
         .btn-ban { background: #ff453a; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;}
         .btn-unban { background: #32d74b; color: black; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;}
         
-        .invite-panel { background: #15151a; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #2c2c35; }
+        .admin-card { background: #15151a; padding: 20px; border-radius: 8px; border: 1px solid #2c2c35; }
+        .admin-card h3 { margin-top: 0; color: #5e5ce6; }
         .invite-links { background: #0a0a0c; padding: 10px; border-radius: 6px; margin-top: 10px; font-family: monospace; color: #32d74b; white-space: pre-wrap; word-wrap: break-word;}
+        
+        .flex-row { display: flex; gap: 10px; align-items: center; margin-top: 10px;}
+        .flex-row input { background: #0a0a0c; border: 1px solid #33333d; color: #fff; padding: 10px; border-radius: 6px; flex: 1; outline: none;}
     </style>
 </head>
 <body>
@@ -88,11 +93,11 @@
         <h1>404 Not Found</h1><p>nginx</p>
     </div>
 
-    <div id="view-invite" class="view">
+    <div id="view-invite" class="view auth-container">
         <div class="auth-box">
             <h2>Активация доступа</h2>
             <input type="text" id="reg-username" placeholder="Логин">
-            <input type="password" id="reg-password" placeholder="Пароль (локальный)">
+            <input type="password" id="reg-password" placeholder="Пароль">
             <button id="btn-register">Генерировать ключи и войти</button>
         </div>
     </div>
@@ -112,7 +117,7 @@
             <div class="chat-area">
                 <div class="chat-header">
                     <span id="chat-header-name">Выберите чат</span>
-                    <span id="crypto-badge" style="font-size: 0.8em; color: #32d74b; display:none;">🔒 ECDH Активен</span>
+                    <span id="crypto-badge" style="font-size: 0.8em; color: #32d74b; display:none;">🔒 ECDH E2EE Активен</span>
                 </div>
                 <div class="messages" id="messages-container">
                     <div class="empty-state">Секретный канал связи<br><span style="font-size:0.7em; color:#666;">(Асимметричное E2EE шифрование)</span></div>
@@ -127,7 +132,7 @@
 
     <div id="view-admin" class="view">
         <div class="admin-header">
-            <h2>⚙️ Панель Управления (Zero Trust)</h2>
+            <h2>⚙️ Панель Управления (Zero Trust C2)</h2>
             <button class="btn-sm" id="btn-close-admin" style="background:#5e5ce6; font-size: 1em;">Вернуться в чат</button>
         </div>
         <div class="admin-content">
@@ -144,11 +149,21 @@
                 <tbody id="admin-users-list"></tbody>
             </table>
 
-            <div class="invite-panel">
+            <div class="admin-card">
                 <h3>Создать новый инвайт</h3>
-                <p style="color:#8a8a93; font-size: 0.9em; margin-bottom: 15px;">Генерирует одноразовую ссылку для регистрации.</p>
+                <p style="color:#8a8a93; font-size: 0.9em; margin-bottom: 10px;">Генерирует одноразовую ссылку для регистрации нового пользователя.</p>
                 <button class="btn-sm" id="btn-generate-invite" style="background: #5e5ce6; font-size: 1em; padding: 10px 20px;">+ Сгенерировать доступ</button>
                 <div class="invite-links" id="invite-links-display" style="display:none;"></div>
+            </div>
+
+            <div class="admin-card">
+                <h3>🔑 Управление Мастер-Ссылкой Админа</h3>
+                <p style="color:#8a8a93; font-size: 0.9em;">Вы можете в любой момент сменить секретный токен мастер-ссылки. Старая ссылка сразу станет выдавать 404.</p>
+                <div class="flex-row">
+                    <input type="text" id="master-key-input" placeholder="Новый токен (например: SUPER-SECRET-KEY-777)">
+                    <button class="btn-sm" id="btn-change-master-key" style="background:#ffd60a; color:#000; font-weight:bold; padding: 10px 15px;">Обновить Мастер-Ключ</button>
+                </div>
+                <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
             </div>
         </div>
     </div>
@@ -164,7 +179,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // --- 2. УТИЛИТЫ ---
+        // --- 2. УТИЛИТЫ И КРИПТОГРАФИЯ ---
         async function sha256(message) {
             const msgBuffer = new TextEncoder().encode(message);
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -172,6 +187,7 @@
         }
         const encodeBase64 = (str) => btoa(encodeURIComponent(str));
         const decodeBase64 = (b64) => decodeURIComponent(atob(b64));
+        
         function formatTime(ts) {
             if(!ts) return "Никогда";
             return new Date(ts).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
@@ -183,6 +199,19 @@
             "https://my-secret-domain.com/"
         ];
 
+        // Default Master Key Токен для чистой базы
+        const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-999";
+
+        // Инициализация Мастер-Ключа в чистой базе при необходимости
+        async function ensureMasterKeyExists() {
+            const snap = await db.ref('admin_master_hash').once('value');
+            if (!snap.exists()) {
+                const defaultHash = await sha256(DEFAULT_MASTER_TOKEN);
+                await db.ref('admin_master_hash').set(defaultHash);
+            }
+        }
+        ensureMasterKeyExists();
+
         // --- 3. РОУТИНГ И СЕССИЯ ---
         const views = {
             404: document.getElementById('view-404'),
@@ -193,12 +222,6 @@
         
         let currentInviteHash = null;
         let mySession = JSON.parse(localStorage.getItem('ghost_session')) || null;
-
-        // Миграция старых сессий (без ECDH ключей)
-        if (mySession && !mySession.priv) {
-            localStorage.removeItem('ghost_session');
-            window.location.reload();
-        }
 
         function showView(viewName) {
             Object.values(views).forEach(el => el.classList.remove('active', 'active-flex'));
@@ -212,24 +235,56 @@
 
         async function handleRoute() {
             const hash = window.location.hash;
-            if (mySession && hash !== '#/app' && hash !== '#/admin') { window.location.hash = '#/app'; return; }
 
+            // А) Мастер-Ссылка Админа (/#/root-key/TOKEN)
+            if (hash.startsWith('#/root-key/')) {
+                const token = hash.replace('#/root-key/', '');
+                const tokenHash = await sha256(token);
+                const masterSnap = await db.ref('admin_master_hash').once('value');
+                
+                if (masterSnap.exists() && masterSnap.val() === tokenHash) {
+                    if (mySession) {
+                        mySession.isAdmin = true;
+                        localStorage.setItem('ghost_session', JSON.stringify(mySession));
+                        alert("👑 Доступ Администратора успешно подтвержден!");
+                        window.location.hash = '#/admin';
+                    } else {
+                        alert("👑 Ключ Админа принят! Зарегистрируйтесь или войдите, чтобы открыть панель.");
+                        // Временная метка админа на время регистрации
+                        sessionStorage.setItem('pending_admin', 'true');
+                        window.location.hash = ''; // Сброс
+                    }
+                    return;
+                } else {
+                    showView('404');
+                    return;
+                }
+            }
+
+            // Б) Защита путей
+            if (mySession && hash !== '#/app' && hash !== '#/admin') { 
+                window.location.hash = '#/app'; 
+                return; 
+            }
+
+            // В) Вход по инвайту
             if (hash.startsWith('#/inv/')) {
                 const token = hash.replace('#/inv/', '');
                 currentInviteHash = await sha256(token);
                 const snap = await db.ref(`invites/${currentInviteHash}`).once('value');
-                if (snap.exists()) showView('invite'); else showView(404);
+                if (snap.exists()) showView('invite'); else showView('404');
             } 
+            // Г) Дашборд
             else if (hash === '#/app') {
                 if (mySession) { showView('app'); initDashboard(); } else window.location.hash = '';
             }
+            // Д) Админка
             else if (hash === '#/admin') {
                 if (mySession && mySession.isAdmin) { showView('admin'); initAdminPanel(); } else window.location.hash = '#/app';
             }
-            else showView(404);
+            else showView('404');
         }
         window.addEventListener('hashchange', handleRoute);
-        handleRoute();
 
         async function fetchAndLogIP(userHash) {
             try {
@@ -239,35 +294,36 @@
             } catch(e) {}
         }
 
-        // --- 4. РЕГИСТРАЦИЯ И ГЕНЕРАЦИЯ ECDH КЛЮЧЕЙ ---
+        // --- 4. РЕГИСТРАЦИЯ С ГЕНЕРАЦИЕЙ ECDH ---
         document.getElementById('btn-register').addEventListener('click', async () => {
             const user = document.getElementById('reg-username').value.trim();
-            if (user.length < 2) return;
+            if (user.length < 2) return alert("Имя слишком короткое!");
 
-            // Генерируем пару ключей для асимметричного шифрования (ECDH P-256)
             const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
             const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
             const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
 
             const userHash = await sha256(user);
+            const isAdmin = sessionStorage.getItem('pending_admin') === 'true';
 
-            // Сохраняем публичный ключ в базу
             await db.ref(`users/${userHash}`).update({
                 n: encodeBase64(user),
-                pk: pubJwk, // Public Key
+                pk: pubJwk,
                 created: Date.now(),
                 isBanned: false
             });
-            await fetchAndLogIP(userHash);
-            await db.ref(`invites/${currentInviteHash}`).remove();
             
-            // Приватный ключ остается только в localStorage браузера
-            mySession = { u: userHash, name: user, isAdmin: false, priv: privJwk };
+            await fetchAndLogIP(userHash);
+            if (currentInviteHash) await db.ref(`invites/${currentInviteHash}`).remove();
+            
+            mySession = { u: userHash, name: user, isAdmin: isAdmin, priv: privJwk };
             localStorage.setItem('ghost_session', JSON.stringify(mySession));
-            window.location.hash = '#/app';
+            sessionStorage.removeItem('pending_admin');
+
+            window.location.hash = isAdmin ? '#/admin' : '#/app';
         });
 
-        // --- 5. ДАШБОРД ---
+        // --- 5. ДАШБОРД (ЧАТ) ---
         function initDashboard() {
             document.getElementById('my-name-display').textContent = mySession.name;
             if (mySession.isAdmin) document.getElementById('btn-open-admin').style.display = 'inline-block';
@@ -284,6 +340,7 @@
                 }
             });
 
+            // Kill Switch (Бан)
             db.ref(`users/${mySession.u}/isBanned`).on('value', (snap) => {
                 if (snap.val() === true) {
                     localStorage.removeItem('ghost_session');
@@ -291,6 +348,7 @@
                 }
             });
 
+            // Список контактов
             db.ref('users').on('value', (snap) => {
                 const list = document.getElementById('contacts-list');
                 list.innerHTML = '';
@@ -325,7 +383,7 @@
             });
         }
 
-        // --- 6. ЧАТЫ И ECDH ШИФРОВАНИЕ ---
+        // --- 6. ЧАТЫ И E2EE ---
         let currentRoomId = null, currentRoomKey = null;
 
         async function openChat(peerHash, peerName) {
@@ -338,17 +396,15 @@
             document.getElementById('chat-input-area').style.display = 'none';
             document.getElementById('crypto-badge').style.display = 'none';
 
-            // 1. Получаем публичный ключ собеседника из базы
             const snap = await db.ref(`users/${peerHash}/pk`).once('value');
             const peerPubJwk = snap.val();
 
             if (!peerPubJwk) {
-                msgsContainer.innerHTML = '<div class="empty-state">У пользователя нет ключей шифрования.<br>Ему нужно пересоздать аккаунт.</div>';
+                msgsContainer.innerHTML = '<div class="empty-state">У пользователя нет ключей шифрования.</div>';
                 return;
             }
 
             try {
-                // 2. Вырабатываем общий секретный ключ AES-GCM (Диффи-Хеллман)
                 const peerPubKey = await crypto.subtle.importKey("jwk", peerPubJwk, {name: "ECDH", namedCurve: "P-256"}, true, []);
                 const myPrivKey = await crypto.subtle.importKey("jwk", mySession.priv, {name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
 
@@ -376,7 +432,7 @@
                         for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
                         const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
                         decryptedText = new TextDecoder().decode(decrypted);
-                    } catch(e) { console.error("Decryption failed", e); }
+                    } catch(e) {}
 
                     const isMe = msg.s === mySession.u;
                     const div = document.createElement('div');
@@ -387,7 +443,7 @@
                 });
 
             } catch (e) {
-                msgsContainer.innerHTML = '<div class="empty-state" style="color:#ff453a;">Критическая ошибка математики ключей.</div>';
+                msgsContainer.innerHTML = '<div class="empty-state" style="color:#ff453a;">Ошибка шифрования.</div>';
             }
         }
 
@@ -463,6 +519,7 @@
             }
         };
 
+        // Генерация мульти-инвайтов
         document.getElementById('btn-generate-invite').addEventListener('click', async () => {
             const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
             const hashedToken = await sha256(rawToken);
@@ -473,19 +530,29 @@
             display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
         });
 
+        // Смена мастер-ссылки админа
+        document.getElementById('btn-change-master-key').addEventListener('click', async () => {
+            const newToken = document.getElementById('master-key-input').value.trim();
+            if (newToken.length < 6) return alert("Токен должен быть не менее 6 символов!");
+
+            const newHash = await sha256(newToken);
+            await db.ref('admin_master_hash').set(newHash);
+            
+            const statusDiv = document.getElementById('master-key-status');
+            statusDiv.style.color = '#32d74b';
+            statusDiv.innerHTML = `✅ Мастер-ключ обновлен! Ваша новая ссылка админа:<br><strong>${window.location.origin}${window.location.pathname}#/root-key/${newToken}</strong>`;
+            document.getElementById('master-key-input').value = '';
+        });
+
+        // Выход
         document.getElementById('btn-logout').onclick = () => {
-            db.ref(`presence/${mySession.u}`).remove().then(() => {
-                localStorage.removeItem('ghost_session');
-                window.location.hash = ''; window.location.reload();
-            });
+            if (mySession) db.ref(`presence/${mySession.u}`).remove();
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
         };
 
-        window.makeMeAdmin = function() {
-            if(!mySession) return console.error("Сначала войдите!");
-            mySession.isAdmin = true;
-            localStorage.setItem('ghost_session', JSON.stringify(mySession));
-            window.location.reload();
-        };
+        // Запуск роутера
+        handleRoute();
     </script>
 </body>
 </html>
