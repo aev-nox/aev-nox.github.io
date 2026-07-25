@@ -21,86 +21,127 @@
         .view.active { display: block; }
         .view.active-flex { display: flex; }
 
-        /* Окно авторизации */
+        /* Авторизация */
         .auth-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
         .auth-box { background: #15151a; border: 1px solid #2c2c35; border-radius: 12px; padding: 30px; width: 90%; max-width: 350px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
         .auth-box h2 { margin: 0; text-align: center; color: #5e5ce6; }
-        .auth-box p { font-size: 0.85em; color: #8a8a93; text-align: center; margin-top: -5px;}
         .auth-box input { background: #0a0a0c; border: 1px solid #33333d; color: #fff; padding: 12px; border-radius: 8px; outline: none; }
         .auth-box button { background: #5e5ce6; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
-        /* ДАШБОРД (Сетка) */
-        .dashboard { width: 100%; max-width: 1200px; height: 100vh; display: flex; background: #0f0f13; }
+        /* ДАШБОРД */
+        .dashboard { width: 100%; max-width: 1400px; height: 100vh; display: flex; background: #0f0f13; }
         
-        /* Левая панель (Контакты) */
+        /* Левая панель */
         .sidebar { width: 300px; border-right: 1px solid #2c2c35; display: flex; flex-direction: column; background: #15151a; }
         .sidebar-header { padding: 15px; background: #1c1c24; border-bottom: 1px solid #2c2c35; display: flex; justify-content: space-between; align-items: center; }
         .contacts-list { flex: 1; overflow-y: auto; }
-        .contact-item { padding: 15px; border-bottom: 1px solid #23232b; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: 0.2s; }
+        .contact-item { padding: 15px; border-bottom: 1px solid #23232b; display: flex; align-items: center; gap: 10px; cursor: pointer; }
         .contact-item:hover { background: #1c1c24; }
         .contact-item.active { background: #2c2c35; }
         
         .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
         .status-dot.online { background: #32d74b; box-shadow: 0 0 8px rgba(50, 215, 75, 0.5); }
-        .contact-name { font-weight: 500; }
+        .contact-name { font-weight: 500; flex: 1; }
+        .last-seen { font-size: 0.7em; color: #8a8a93; }
 
         /* Правая панель (Чат) */
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #0a0a0c; position: relative; }
         .chat-header { padding: 15px 20px; background: #15151a; border-bottom: 1px solid #2c2c35; font-weight: bold; display: flex; justify-content: space-between;}
-        
         .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; line-height: 1.4; word-wrap: break-word; }
         .msg.you { align-self: flex-end; background: #5e5ce6; color: #fff; border-bottom-right-radius: 2px; }
         .msg.peer { align-self: flex-start; background: #2c2c35; color: #fff; border-bottom-left-radius: 2px; }
-        
         .chat-input { padding: 15px; background: #15151a; border-top: 1px solid #2c2c35; display: flex; gap: 10px; }
         .chat-input input { flex: 1; background: #0a0a0c; border: 1px solid #33333d; color: #fff; padding: 12px 15px; border-radius: 20px; outline: none; }
         .chat-input button { background: #5e5ce6; color: white; border: none; width: 42px; height: 42px; border-radius: 50%; cursor: pointer; font-size: 1.2em; }
-
         .empty-state { flex: 1; display: flex; justify-content: center; align-items: center; color: #666; font-size: 1.2em; }
-        button.logout { background: transparent; border: 1px solid #ff453a; color: #ff453a; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+
+        /* Кнопки */
+        button.btn-sm { background: #2c2c35; color: #fff; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8em;}
+        button.btn-sm:hover { background: #3a3a45; }
+        button.logout { background: transparent; border: 1px solid #ff453a; color: #ff453a; }
+        button.admin-btn { background: #ffd60a; color: #000; font-weight: bold; display: none; }
+
+        /* ПАНЕЛЬ АДМИНА */
+        #view-admin { width: 100%; height: 100vh; background: #0f0f13; padding: 20px; overflow-y: auto; box-sizing: border-box;}
+        .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #2c2c35; padding-bottom: 15px;}
+        .admin-table { width: 100%; border-collapse: collapse; background: #15151a; border-radius: 8px; overflow: hidden; }
+        .admin-table th, .admin-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #2c2c35; }
+        .admin-table th { background: #1c1c24; color: #8a8a93; font-size: 0.9em; }
+        .admin-table tr:hover { background: #1a1a20; }
+        .action-btns { display: flex; gap: 5px; }
+        .btn-ban { background: #ff453a; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;}
+        .btn-unban { background: #32d74b; color: black; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;}
+        
+        .invite-panel { background: #15151a; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #2c2c35; }
+        .invite-links { background: #0a0a0c; padding: 10px; border-radius: 6px; margin-top: 10px; font-family: monospace; color: #32d74b; white-space: pre-wrap; word-wrap: break-word;}
     </style>
 </head>
 <body>
 
     <div id="view-404" class="view active">
-        <h1>404 Not Found</h1>
-        <p>nginx</p>
+        <h1>404 Not Found</h1><p>nginx</p>
     </div>
 
     <div id="view-invite" class="view auth-container">
         <div class="auth-box">
-            <h2>Активация</h2>
-            <p>Создайте учетную запись</p>
-            <input type="text" id="reg-username" placeholder="Никнейм">
-            <input type="password" id="reg-password" placeholder="Пароль">
-            <button id="btn-register">Войти</button>
+            <h2>Активация доступа</h2>
+            <input type="text" id="reg-username" placeholder="Логин">
+            <input type="password" id="reg-password" placeholder="Секретный пароль">
+            <button id="btn-register">Зашифровать и войти</button>
         </div>
     </div>
 
     <div id="view-app" class="view">
         <div class="dashboard">
-            
             <div class="sidebar">
                 <div class="sidebar-header">
-                    <span id="my-name-display">Загрузка...</span>
-                    <button class="logout" id="btn-logout">Выход</button>
-                </div>
-                <div class="contacts-list" id="contacts-list">
+                    <div>
+                        <span id="my-name-display" style="font-weight:bold;">Загрузка...</span>
+                        <button class="btn-sm admin-btn" id="btn-open-admin">⚙️ Админ</button>
                     </div>
+                    <button class="btn-sm logout" id="btn-logout">Выход</button>
+                </div>
+                <div class="contacts-list" id="contacts-list"></div>
             </div>
-
             <div class="chat-area">
                 <div class="chat-header" id="chat-header">Выберите чат</div>
                 <div class="messages" id="messages-container">
-                    <div class="empty-state">Выберите контакт для начала защищенного общения</div>
+                    <div class="empty-state">Секретный канал связи</div>
                 </div>
                 <div class="chat-input" id="chat-input-area" style="display: none;">
-                    <input type="text" id="msg-input" placeholder="Введите сообщение...">
+                    <input type="text" id="msg-input" placeholder="Сообщение...">
                     <button id="btn-send">➤</button>
                 </div>
             </div>
+        </div>
+    </div>
 
+    <div id="view-admin" class="view">
+        <div class="admin-header">
+            <h2>⚙️ Панель Управления (Zero Trust C2)</h2>
+            <button class="btn-sm" id="btn-close-admin">Вернуться в чат</button>
+        </div>
+        
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Пользователь</th>
+                    <th>Статус</th>
+                    <th>Последний вход</th>
+                    <th>Лог IP адресов</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="admin-users-list">
+                </tbody>
+        </table>
+
+        <div class="invite-panel">
+            <h3>Создать новый инвайт</h3>
+            <p style="color:#8a8a93; font-size: 0.9em;">Генерирует одноразовую ссылку для регистрации нового пользователя.</p>
+            <button class="btn-sm" id="btn-generate-invite" style="background: #5e5ce6; font-size: 1em; padding: 10px 20px;">+ Сгенерировать доступ</button>
+            <div class="invite-links" id="invite-links-display" style="display:none;"></div>
         </div>
     </div>
 
@@ -115,22 +156,33 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // --- 2. БАЗОВАЯ КРИПТОГРАФИЯ ---
+        // --- 2. КРИПТОГРАФИЯ И УТИЛИТЫ ---
         async function sha256(message) {
             const msgBuffer = new TextEncoder().encode(message);
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
             return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
         }
+        const encodeBase64 = (str) => btoa(encodeURIComponent(str));
+        const decodeBase64 = (b64) => decodeURIComponent(atob(b64));
         
-        // Обфускация имен (чтобы в БД не было видно никнеймов)
-        const encodeName = (name) => btoa(encodeURIComponent(name));
-        const decodeName = (b64) => decodeURIComponent(atob(b64));
+        function formatTime(ts) {
+            if(!ts) return "Никогда";
+            return new Date(ts).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+        }
 
-        // --- 3. РОУТИНГ И УПРАВЛЕНИЕ ВИДАМИ ---
+        // Домены для мульти-инвайтов
+        const DOMAINS = [
+            window.location.origin + window.location.pathname, // Текущий
+            "https://aev-nox.vercel.app/",
+            "https://my-secret-domain.com/"
+        ];
+
+        // --- 3. РОУТИНГ И СЕССИЯ ---
         const views = {
             404: document.getElementById('view-404'),
             invite: document.getElementById('view-invite'),
-            app: document.getElementById('view-app')
+            app: document.getElementById('view-app'),
+            admin: document.getElementById('view-admin')
         };
         let currentInviteHash = null;
         let mySession = JSON.parse(localStorage.getItem('ghost_session')) || null;
@@ -138,7 +190,7 @@
         function showView(viewName) {
             Object.values(views).forEach(el => el.classList.remove('active', 'active-flex'));
             document.body.classList.toggle('app-theme', viewName !== 404);
-            document.title = viewName === 404 ? "404 Not Found" : "Ghost Chat";
+            document.title = viewName === 404 ? "404 Not Found" : "Ghost Core";
             
             const target = views[viewName];
             if (viewName === 'app') target.classList.add('active-flex');
@@ -147,93 +199,112 @@
 
         async function handleRoute() {
             const hash = window.location.hash;
-            
-            if (mySession && hash !== '#/app') { window.location.hash = '#/app'; return; }
+            if (mySession && hash !== '#/app' && hash !== '#/admin') { window.location.hash = '#/app'; return; }
 
             if (hash.startsWith('#/inv/')) {
                 const token = hash.replace('#/inv/', '');
                 currentInviteHash = await sha256(token);
                 const snap = await db.ref(`invites/${currentInviteHash}`).once('value');
-                if (snap.exists()) showView('invite');
-                else showView(404);
+                if (snap.exists()) showView('invite'); else showView(404);
             } 
             else if (hash === '#/app') {
-                if (mySession) { showView('app'); initDashboard(); }
-                else window.location.hash = '';
-            } 
+                if (mySession) { showView('app'); initDashboard(); } else window.location.hash = '';
+            }
+            else if (hash === '#/admin') {
+                if (mySession && mySession.isAdmin) { showView('admin'); initAdminPanel(); } else window.location.hash = '#/app';
+            }
             else showView(404);
         }
-
         window.addEventListener('hashchange', handleRoute);
         handleRoute();
 
-        // --- 4. РЕГИСТРАЦИЯ ---
+        // --- 4. РЕГИСТРАЦИЯ И СБОР IP ---
+        async function fetchAndLogIP(userHash) {
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const data = await res.json();
+                await db.ref(`users/${userHash}/ips/${Date.now()}`).set(encodeBase64(data.ip));
+            } catch(e) { console.error("IP Blocked by client"); }
+        }
+
         document.getElementById('btn-register').addEventListener('click', async () => {
             const user = document.getElementById('reg-username').value.trim();
             const pass = document.getElementById('reg-password').value.trim();
-            if (user.length < 2) return alert("Имя слишком короткое");
+            if (user.length < 2) return;
 
             const userHash = await sha256(user);
             const passHash = await sha256(pass);
 
-            // Сохраняем "мусор" в базу (обфусцированное имя)
-            await db.ref(`users/${userHash}`).set({
-                n: encodeName(user),
-                c: Date.now()
+            await db.ref(`users/${userHash}`).update({
+                n: encodeBase64(user),
+                created: Date.now(),
+                isBanned: false
             });
-
+            await fetchAndLogIP(userHash); // Пишем IP при регистрации
             await db.ref(`invites/${currentInviteHash}`).remove();
             
-            mySession = { u: userHash, p: passHash, name: user };
+            mySession = { u: userHash, p: passHash, name: user, isAdmin: false };
             localStorage.setItem('ghost_session', JSON.stringify(mySession));
             window.location.hash = '#/app';
         });
 
-        // --- 5. ЛОГИКА ДАШБОРДА (ЧАТЫ) ---
-        let currentRoomId = null;
-        let currentRoomKey = null;
-
+        // --- 5. ДАШБОРД И БАН-КОНТРОЛЬ (KILL SWITCH) ---
         function initDashboard() {
-            document.getElementById('my-name-display').textContent = mySession.name || "Я";
-            
-            // 1. Система Присутствия (Presence)
+            document.getElementById('my-name-display').textContent = mySession.name;
+            if (mySession.isAdmin) document.getElementById('btn-open-admin').style.display = 'inline-block';
+
+            // Трекинг IP при каждом входе
+            fetchAndLogIP(mySession.u);
+
+            // Система присутствия и Last Seen
             const myPresenceRef = db.ref(`presence/${mySession.u}`);
+            const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
+            
             db.ref('.info/connected').on('value', (snap) => {
                 if (snap.val() === true) {
                     myPresenceRef.onDisconnect().remove();
+                    myLastSeenRef.onDisconnect().set(Date.now());
                     myPresenceRef.set(true);
                 }
             });
 
-            // 2. Загрузка Контактов
+            // KILL SWITCH: Слушаем свой статус бана
+            db.ref(`users/${mySession.u}/isBanned`).on('value', (snap) => {
+                if (snap.val() === true) {
+                    localStorage.removeItem('ghost_session');
+                    window.location.hash = '';
+                    window.location.reload(); // Выкидывает на 404
+                }
+            });
+
+            // Рендер контактов
             db.ref('users').on('value', (snap) => {
-                const contactsList = document.getElementById('contacts-list');
-                contactsList.innerHTML = '';
-                
+                const list = document.getElementById('contacts-list');
+                list.innerHTML = '';
                 snap.forEach(child => {
-                    const peerHash = child.key;
-                    if (peerHash === mySession.u) return; // Себя не выводим
-                    
-                    const peerData = child.val();
-                    const readableName = decodeName(peerData.n);
-                    
+                    if (child.key === mySession.u) return;
+                    const data = child.val();
+                    if (data.isBanned) return; // Скрываем забаненных
+
+                    const name = decodeBase64(data.n);
                     const div = document.createElement('div');
                     div.className = 'contact-item';
-                    div.id = `contact-${peerHash}`;
+                    div.id = `contact-${child.key}`;
                     
                     div.innerHTML = `
-                        <div class="status-dot" id="status-${peerHash}"></div>
-                        <div class="contact-name">${readableName}</div>
+                        <div class="status-dot" id="status-${child.key}"></div>
+                        <div style="flex:1;">
+                            <div class="contact-name">${name}</div>
+                            <div class="last-seen">Был: ${formatTime(data.lastSeen)}</div>
+                        </div>
                     `;
-                    
-                    div.onclick = () => openChat(peerHash, readableName);
-                    contactsList.appendChild(div);
+                    div.onclick = () => openChat(child.key, name);
+                    list.appendChild(div);
                 });
             });
 
-            // 3. Отслеживание онлайна контактов
             db.ref('presence').on('value', (snap) => {
-                document.querySelectorAll('.status-dot').forEach(dot => dot.classList.remove('online'));
+                document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('online'));
                 snap.forEach(child => {
                     const dot = document.getElementById(`status-${child.key}`);
                     if (dot) dot.classList.add('online');
@@ -241,23 +312,20 @@
             });
         }
 
-        // --- 6. ОТКРЫТИЕ ПРИВАТНОГО ЧАТА И ШИФРОВАНИЕ ---
+        // --- 6. ЧАТЫ (БЕЗ ИЗМЕНЕНИЙ) ---
+        let currentRoomId = null, currentRoomKey = null;
         async function openChat(peerHash, peerName) {
-            // Подсветка активного контакта
             document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
             document.getElementById(`contact-${peerHash}`).classList.add('active');
-            
             document.getElementById('chat-header').textContent = peerName;
             document.getElementById('chat-input-area').style.display = 'flex';
             
             const msgsContainer = document.getElementById('messages-container');
-            msgsContainer.innerHTML = ''; // Очистка экрана
+            msgsContainer.innerHTML = '';
 
-            // Создаем уникальный ID комнаты (сортируем хэши по алфавиту)
             const hashes = [mySession.u, peerHash].sort();
             currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
             
-            // Вырабатываем AES ключ из пароля пользователя и ID комнаты (очень базовая защита для Спринта 2)
             const enc = new TextEncoder();
             const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(mySession.p), {name: "PBKDF2"}, false, ["deriveKey"]);
             currentRoomKey = await crypto.subtle.deriveKey(
@@ -265,13 +333,10 @@
                 keyMaterial, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]
             );
 
-            // Отписываемся от старого чата и подписываемся на новый
             db.ref('rooms').off();
             db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snap) => {
                 const msg = snap.val();
-                
-                // Дешифровка
-                let decryptedText = "[Ошибка дешифровки]";
+                let decryptedText = "[Ошибка]";
                 try {
                     const str = atob(msg.d);
                     const combined = new Uint8Array(str.length);
@@ -281,57 +346,112 @@
                 } catch(e) {}
 
                 const isMe = msg.s === mySession.u;
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `msg ${isMe ? 'you' : 'peer'}`;
-                msgDiv.textContent = decryptedText;
-                
-                msgsContainer.appendChild(msgDiv);
+                const div = document.createElement('div');
+                div.className = `msg ${isMe ? 'you' : 'peer'}`;
+                div.textContent = decryptedText;
+                msgsContainer.appendChild(div);
                 msgsContainer.scrollTop = msgsContainer.scrollHeight;
             });
         }
 
-        // Отправка сообщения
         document.getElementById('btn-send').addEventListener('click', async () => {
             const input = document.getElementById('msg-input');
             const text = input.value.trim();
-            if (!text || !currentRoomId || !currentRoomKey) return;
+            if (!text || !currentRoomId) return;
             input.value = '';
 
-            // Шифрование
             const enc = new TextEncoder();
             const iv = crypto.getRandomValues(new Uint8Array(12));
             const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, currentRoomKey, enc.encode(text));
             const combined = new Uint8Array(12 + encrypted.byteLength);
             combined.set(iv, 0); combined.set(new Uint8Array(encrypted), 12);
-            const b64Encoded = btoa(String.fromCharCode.apply(null, combined));
 
             db.ref(`rooms/${currentRoomId}/messages`).push({
                 s: mySession.u,
-                d: b64Encoded,
+                d: btoa(String.fromCharCode.apply(null, combined)),
                 t: Date.now()
             });
         });
 
-        // Отправка по Enter
-        document.getElementById('msg-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') document.getElementById('btn-send').click();
+        // --- 7. АДМИН ПАНЕЛЬ ---
+        document.getElementById('btn-open-admin').onclick = () => window.location.hash = '#/admin';
+        document.getElementById('btn-close-admin').onclick = () => window.location.hash = '#/app';
+
+        let onlineUsers = new Set();
+        db.ref('presence').on('value', snap => {
+            onlineUsers.clear();
+            snap.forEach(c => onlineUsers.add(c.key));
+        });
+
+        function initAdminPanel() {
+            db.ref('users').on('value', snap => {
+                const tbody = document.getElementById('admin-users-list');
+                tbody.innerHTML = '';
+                
+                snap.forEach(child => {
+                    const data = child.val();
+                    const hash = child.key;
+                    const name = decodeBase64(data.n);
+                    const isOnline = onlineUsers.has(hash);
+                    
+                    // Форматируем IP
+                    let ipsHtml = '';
+                    if (data.ips) {
+                        const sorted = Object.entries(data.ips).sort((a,b) => b[0] - a[0]).slice(0, 3); // Последние 3 IP
+                        ipsHtml = sorted.map(([ts, ipB64]) => `${decodeBase64(ipB64)} <span style="color:#666;font-size:0.8em">(${formatTime(Number(ts))})</span>`).join('<br>');
+                    } else ipsHtml = 'Нет данных';
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${name}</strong><br><span style="font-size:0.7em;color:#666">${hash.substring(0,8)}...</span></td>
+                        <td>${data.isBanned ? '⛔ Забанен' : (isOnline ? '🟢 Онлайн' : '⚪ Оффлайн')}</td>
+                        <td>${formatTime(data.lastSeen)}</td>
+                        <td style="font-family:monospace; font-size:0.9em;">${ipsHtml}</td>
+                        <td class="action-btns">
+                            ${data.isBanned 
+                                ? `<button class="btn-unban" onclick="toggleBan('${hash}', false)">Разбанить</button>` 
+                                : `<button class="btn-ban" onclick="toggleBan('${hash}', true)">Забанить</button>`}
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+
+        window.toggleBan = async function(userHash, state) {
+            if(confirm(state ? "Точно забанить? Его выкинет мгновенно." : "Разбанить пользователя?")) {
+                await db.ref(`users/${userHash}/isBanned`).set(state);
+            }
+        };
+
+        document.getElementById('btn-generate-invite').addEventListener('click', async () => {
+            const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+            const hashedToken = await sha256(rawToken);
+            await db.ref(`invites/${hashedToken}`).set({ createdBy: mySession.u, timestamp: Date.now() });
+            
+            const display = document.getElementById('invite-links-display');
+            display.style.display = 'block';
+            display.innerHTML = "Разошлите одну из этих ссылок (все ведут в одну базу):<br><br>" + 
+                DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
         });
 
         // Выход
-        document.getElementById('btn-logout').addEventListener('click', () => {
-            const myPresenceRef = db.ref(`presence/${mySession.u}`);
-            myPresenceRef.remove().then(() => {
+        document.getElementById('btn-logout').onclick = () => {
+            db.ref(`presence/${mySession.u}`).remove().then(() => {
                 localStorage.removeItem('ghost_session');
-                window.location.hash = '';
-                window.location.reload();
+                window.location.hash = ''; window.location.reload();
             });
-        });
+        };
 
-        // --- ДЛЯ ТЕСТОВ (ГЕНЕРАТОР ИНВАЙТОВ) ---
-        window.createAdminInvite = async function(tokenText) {
-            const hashed = await sha256(tokenText);
-            await db.ref(`invites/${hashed}`).set({ createdBy: "admin", timestamp: Date.now() });
-            console.log(`✅ Инвайт создан! Ссылка:\n${window.location.origin}${window.location.pathname}#/inv/${tokenText}`);
+        // ==========================================
+        // КАК СТАТЬ АДМИНОМ (Введи это в консоль F12)
+        // ==========================================
+        window.makeMeAdmin = function() {
+            if(!mySession) return console.error("Сначала войдите в систему!");
+            mySession.isAdmin = true;
+            localStorage.setItem('ghost_session', JSON.stringify(mySession));
+            window.location.reload();
+            console.log("✅ Вы назначены Администратором!");
         };
     </script>
 </body>
