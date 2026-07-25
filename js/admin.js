@@ -35,6 +35,7 @@ function initAdminPanel() {
                         ? `<button class="btn-unban" onclick="toggleBan('${hash}', false)">Разбанить</button>` 
                         : `<button class="btn-ban" onclick="toggleBan('${hash}', true)">Забанить</button>`}
                     <button class="btn-edit" onclick="editUser('${hash}', '${escapeHTML(name)}')">✏️ Имя</button>
+                    <button class="btn-sm" style="background:#f59e0b; color:#000;" onclick="resetPassword('${hash}')">🔑 Сброс пароля</button>
                     <button class="btn-sm" style="background:#6366f1;" onclick="regenerateUserLink('${hash}')">🔄 Ссылка</button>
                     <button class="btn-delete" onclick="deleteUserCompletely('${hash}')">❌ Удалить</button>
                 </td>
@@ -44,52 +45,58 @@ function initAdminPanel() {
     });
 }
 
+function escapeHTML(str) {
+    return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+    );
+}
+
 window.toggleBan = async function(userHash, state) {
     if(confirm(state ? "Заблокировать пользователя?" : "Разблокировать пользователя?")) {
         await db.ref(`users/${userHash}/isBanned`).set(state);
     }
 };
 
-// Изменение имени пользователя
 window.editUser = async function(userHash, currentName) {
-    const newName = prompt("Введите новое имя для пользователя:", currentName);
+    const newName = prompt("Введите новое имя:", currentName);
     if (newName && newName.trim().length >= 2) {
         await db.ref(`users/${userHash}/n`).set(encodeBase64(newName.trim()));
-        alert("Имя пользователя обновлено!");
     }
 };
 
-// Полное удаление аккаунта
+// Сброс пароля (уничтожение E2EE ключей)
+window.resetPassword = async function(userHash) {
+    const msg = "ВНИМАНИЕ: Сброс пароля сотрет крипто-ключи пользователя (End-to-End). Он сможет войти и придумать новый пароль, но СТАРЫЕ ЧАТЫ СТАНУТ НЕЧИТАЕМЫМИ.\n\nПродолжить сброс?";
+    if (!confirm(msg)) return;
+
+    await db.ref(`users/${userHash}/ph`).remove();
+    await db.ref(`users/${userHash}/pk`).remove();
+    await db.ref(`users/${userHash}/epk`).remove();
+    alert("Ключи сброшены. При следующем входе по своей ссылке пользователь должен задать новый пароль.");
+};
+
 window.deleteUserCompletely = async function(userHash) {
     if (!confirm("⚠️ ВНИМАНИЕ: Аккаунт будет удален навсегда! Продолжить?")) return;
 
-    // Стираем профиль и присутствие
     await db.ref(`users/${userHash}`).remove();
     await db.ref(`presence/${userHash}`).remove();
     await db.ref(`admins/${userHash}`).remove();
 
-    // Удаляем все инвайты юзера
     const invitesSnap = await db.ref('invites').once('value');
     invitesSnap.forEach(child => {
-        if (child.val().userHash === userHash) {
-            db.ref(`invites/${child.key}`).remove();
-        }
+        if (child.val().userHash === userHash) db.ref(`invites/${child.key}`).remove();
     });
-
-    alert("Пользователь полностью удален из базы данных.");
 };
 
 window.regenerateUserLink = async function(userHash) {
-    if(!confirm("Старая ссылка станет 404. Выдать новую?")) return;
+    if(!confirm("Математика Zero-Knowledge запрещает хранить ссылки в открытом виде. Старая ссылка сгорит (404), будет сгенерирована новая. Продолжить?")) return;
 
     const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
     const hashedToken = await sha256(rawToken);
 
     const invitesSnap = await db.ref('invites').once('value');
     invitesSnap.forEach(child => {
-        if (child.val().userHash === userHash) {
-            db.ref(`invites/${child.key}`).remove();
-        }
+        if (child.val().userHash === userHash) db.ref(`invites/${child.key}`).remove();
     });
 
     await db.ref(`invites/${hashedToken}`).set({
@@ -100,7 +107,7 @@ window.regenerateUserLink = async function(userHash) {
 
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    display.innerHTML = `✅ Ссылка обновлена! Отправьте пользователю:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    display.innerHTML = `✅ Новая персональная ссылка пользователя:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 };
 
 document.getElementById('btn-generate-invite').addEventListener('click', async () => {
