@@ -13,7 +13,8 @@ const DOMAINS = [
     "https://my-secret-domain.com/"
 ];
 
-const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-999";
+// Обновленный длинный мастер-токен по умолчанию
+const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-KEY-8f3a9b1c7d2e4f5a";
 
 async function ensureMasterKeyExists() {
     const snap = await db.ref('admin_master_hash').once('value');
