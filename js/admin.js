@@ -45,12 +45,6 @@ function initAdminPanel() {
     });
 }
 
-function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-    );
-}
-
 window.toggleBan = async function(userHash, state) {
     if(confirm(state ? "Заблокировать пользователя?" : "Разблокировать пользователя?")) {
         await db.ref(`users/${userHash}/isBanned`).set(state);
@@ -64,7 +58,6 @@ window.editUser = async function(userHash, currentName) {
     }
 };
 
-// Сброс пароля (уничтожение E2EE ключей)
 window.resetPassword = async function(userHash) {
     const msg = "ВНИМАНИЕ: Сброс пароля сотрет крипто-ключи пользователя (End-to-End). Он сможет войти и придумать новый пароль, но СТАРЫЕ ЧАТЫ СТАНУТ НЕЧИТАЕМЫМИ.\n\nПродолжить сброс?";
     if (!confirm(msg)) return;
@@ -104,6 +97,9 @@ window.regenerateUserLink = async function(userHash) {
         registered: true,
         updatedAt: Date.now()
     });
+
+    // Убиваем текущую сессию
+    await db.ref(`users/${userHash}/linkRevokedAt`).set(Date.now());
 
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
