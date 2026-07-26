@@ -1,5 +1,3 @@
-'use strict';
-
 const views = {
     404: document.getElementById('view-404'),
     invite: document.getElementById('view-invite'),
@@ -30,18 +28,13 @@ function setupAuthUI(isLogin, username = "") {
     const title = document.getElementById('auth-title');
     const subtitle = document.getElementById('auth-subtitle');
     const userInput = document.getElementById('reg-username');
-    const passConfirmInput = document.getElementById('reg-password-confirm');
-    const warningBox = document.getElementById('auth-warning');
-    const checkboxesBox = document.getElementById('auth-checkboxes');
     const btn = document.getElementById('btn-register');
+    const warningBox = document.getElementById('auth-warning');
 
     if (isLogin) {
         if (title) title.textContent = "Вход в систему";
         if (subtitle) subtitle.textContent = `Персональный канал: ${username}`;
         if (warningBox) warningBox.style.display = "none";
-        if (checkboxesBox) checkboxesBox.style.display = "none";
-        if (passConfirmInput) passConfirmInput.style.display = "none";
-        
         userInput.value = username;
         userInput.disabled = true;
         btn.textContent = "Войти в аккаунт";
@@ -49,13 +42,38 @@ function setupAuthUI(isLogin, username = "") {
         if (title) title.textContent = "Активация доступа";
         if (subtitle) subtitle.textContent = username ? "Регистрация Администратора" : "Первичная регистрация";
         if (warningBox) warningBox.style.display = "block";
-        if (checkboxesBox) checkboxesBox.style.display = "flex";
-        if (passConfirmInput) passConfirmInput.style.display = "block";
-        
         userInput.value = "";
         userInput.disabled = false;
         btn.textContent = "Зарегистрироваться и войти";
     }
+}
+
+async function derivePassKey(userHash, password) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
+    return await crypto.subtle.deriveKey(
+        {name: "PBKDF2", salt: enc.encode(userHash), iterations: 100000, hash: "SHA-256"},
+        keyMaterial, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]
+    );
+}
+
+async function encryptPrivateKey(userHash, password, privJwk) {
+    const passKey = await derivePassKey(userHash, password);
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, passKey, enc.encode(JSON.stringify(privJwk)));
+    const combined = new Uint8Array(12 + encrypted.byteLength);
+    combined.set(iv, 0); combined.set(new Uint8Array(encrypted), 12);
+    return btoa(String.fromCharCode.apply(null, combined));
+}
+
+async function decryptPrivateKey(userHash, password, encryptedB64) {
+    const passKey = await derivePassKey(userHash, password);
+    const str = atob(encryptedB64);
+    const combined = new Uint8Array(str.length);
+    for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
+    const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, passKey, combined.slice(12));
+    return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
 async function handleRoute() {
@@ -99,12 +117,16 @@ async function handleRoute() {
                 if (userSnap.exists()) {
                     setupAuthUI(true, decodeBase64(userSnap.val().n));
                     showView('invite');
-                } else showView('404');
+                } else {
+                    showView('404');
+                }
             } else {
                 setupAuthUI(false, "");
                 showView('invite');
             }
-        } else showView('404');
+        } else {
+            showView('404');
+        }
     } 
     else if (hash === '#/app') {
         if (mySession) { showView('app'); initDashboard(); } else window.location.hash = '';
@@ -113,7 +135,9 @@ async function handleRoute() {
         const hasAdminRights = mySession && await isRealAdmin(mySession.u);
         if (hasAdminRights) {
             showView('admin'); initAdminPanel(); 
-        } else window.location.hash = '#/app';
+        } else {
+            window.location.hash = '#/app';
+        }
     }
     else showView('404');
 }
@@ -123,21 +147,11 @@ window.addEventListener('hashchange', handleRoute);
 document.getElementById('btn-register').addEventListener('click', async () => {
     const user = document.getElementById('reg-username').value.trim();
     const pass = document.getElementById('reg-password').value.trim();
-    const isLoginMode = document.getElementById('reg-username').disabled;
-
-    if (user.length < 2 || pass.length < 4) return alert("Логин от 2 симв., пароль от 4 симв.!");
-
-    if (!isLoginMode) {
-        const passConfirm = document.getElementById('reg-password-confirm').value.trim();
-        const understandChecked = document.getElementById('reg-understand').checked;
-        if (pass !== passConfirm) return alert("❌ Пароли не совпадают!");
-        if (!understandChecked) return alert("❌ Подтвердите ознакомление с правилами!");
-    }
+    if (user.length < 2 || pass.length < 4) return alert("Логин от 2 символов, пароль от 4 символов!");
 
     const userHash = await sha256(user);
-    const passHash = await sha256(userHash + ":" + pass); 
+    const passHash = await sha256(userHash + ":" + pass); // Соль отвязана от никнейма
 
-    // --- ВХОД СУЩЕСТВУЮЩЕГО ---
     if (currentInviteData && currentInviteData.userHash) {
         const targetUserHash = currentInviteData.userHash;
         const targetPassHash = await sha256(targetUserHash + ":" + pass);
@@ -147,6 +161,22 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         
         const userData = userSnap.val();
         if (userData.isBanned) return alert("⛔ Аккаунт заблокирован!");
+
+        if (!userData.ph) {
+            const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
+            const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+            const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+            const encryptedPrivKey = await encryptPrivateKey(targetUserHash, pass, privJwk);
+
+            await db.ref(`users/${targetUserHash}`).update({ pk: pubJwk, epk: encryptedPrivKey, ph: targetPassHash });
+            alert("🔑 Новый пароль установлен. Ключи перегенерированы.");
+            
+            const isAdmin = await isRealAdmin(targetUserHash);
+            mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
+            localStorage.setItem('ghost_session', JSON.stringify(mySession));
+            window.location.hash = isAdmin ? '#/admin' : '#/app';
+            return;
+        }
 
         if (userData.ph !== targetPassHash) return alert("❌ Неверный пароль!");
 
@@ -158,49 +188,55 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         }
 
         const isAdmin = await isRealAdmin(targetUserHash);
-        mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk, loginTime: Date.now() };
+        mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
         sessionStorage.removeItem('pending_admin');
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
     } 
-    // --- ПЕРВИЧНАЯ РЕГИСТРАЦИЯ ---
     else {
         const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
-        if (!currentInviteData && !isPendingAdmin) return alert("❌ Ошибка прав доступа.");
+        if (!currentInviteData && !isPendingAdmin) {
+            return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта.");
+        }
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
         const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
 
-        const recoveryCode = generateRecoveryCode();
         const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
-        const encryptedRecoveryKey = await encryptPrivateKey(userHash, recoveryCode, privJwk); // Двойное шифрование
 
         await db.ref(`users/${userHash}`).update({
             n: encodeBase64(user),
             pk: pubJwk,
             epk: encryptedPrivKey,
-            erk: encryptedRecoveryKey,
             ph: passHash,
-            created: firebase.database.ServerValue.TIMESTAMP,
+            created: Date.now(),
             isBanned: false
         });
 
         if (isPendingAdmin) await db.ref(`admins/${userHash}`).set(true);
+        await fetchAndLogIP(userHash);
 
         if (currentInviteHash) {
-            await db.ref(`invites/${currentInviteHash}`).update({ userHash: userHash, registered: true });
+            await db.ref(`invites/${currentInviteHash}`).update({
+                userHash: userHash,
+                registered: true,
+                registeredAt: Date.now()
+            });
         }
         
-        if (document.getElementById('reg-download').checked) {
-            downloadCredentials(user, pass, recoveryCode);
-        }
-
-        mySession = { u: userHash, name: user, isAdmin: isPendingAdmin, priv: privJwk, loginTime: Date.now() };
+        mySession = { u: userHash, name: user, isAdmin: isPendingAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
         sessionStorage.removeItem('pending_admin');
 
         window.location.hash = isPendingAdmin ? '#/admin' : '#/app';
     }
 });
+
+document.getElementById('btn-logout').onclick = () => {
+    if (mySession) db.ref(`presence/${mySession.u}`).remove();
+    localStorage.removeItem('ghost_session');
+    window.location.hash = ''; 
+    window.location.reload();
+};
