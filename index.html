@@ -31,9 +31,9 @@
             <div id="auth-warning" class="warning-box">
                 <span class="warning-title">⚠️ КРИТИЧЕСКИ ВАЖНО</span>
                 <ul class="warning-list">
-                    <li><b>Сбросить или восстановить пароль невозможно!</b></li>
-                    <li>Все данные зашифрованы вашим паролем.</li>
-                    <li>При утере пароля вся переписка будет навсегда утеряна.</li>
+                    <li><b>Сбросить пароль невозможно!</b></li>
+                    <li>Все данные зашифрованы ключами Zero-Knowledge.</li>
+                    <li>Сохраните резервный код, иначе переписка будет утеряна.</li>
                 </ul>
             </div>
 
@@ -44,7 +44,7 @@
             <div id="auth-checkboxes" class="auth-options">
                 <label class="checkbox-label">
                     <input type="checkbox" id="reg-understand">
-                    <span>Я буду хранить доступы в надежном месте.</span>
+                    <span>Я понимаю риски и буду хранить доступы надежно.</span>
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" id="reg-download" checked>
@@ -76,7 +76,7 @@
                     </button>
                     <button class="menu-item admin-only" id="btn-open-admin" style="display:none;" title="Панель C2">
                         <span class="menu-icon">⚙️</span>
-                        <span class="menu-label">Панель C2</span>
+                        <span class="menu-label">Панель Управления</span>
                     </button>
                 </div>
 
@@ -112,7 +112,7 @@
                 <div class="messages" id="messages-container">
                     <div class="empty-state">
                         Zero-Knowledge Channel<br>
-                        <span>Ожидание выбора собеседника...</span>
+                        <span style="font-size:0.75em; opacity: 0.6;">Ожидание выбора собеседника...</span>
                     </div>
                 </div>
                 
@@ -145,13 +145,49 @@
                 <hr class="divider">
                 <div class="profile-field">
                     <label>Безопасность:</label>
-                    <button class="btn-sm btn-primary w-100" id="btn-download-recovery">🔑 Скачать Коды Восстановления</button>
+                    <p style="font-size: 0.75em; color: var(--text-secondary); margin: 0 0 10px 0;">Генерация нового кода восстановления деактивирует старый.</p>
+                    <button class="btn-sm btn-primary w-100" id="btn-download-recovery">🔑 Сгенерировать новый код восстановления</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="view-admin" class="view">...</div>
+    <div id="view-admin" class="view">
+        <div class="admin-header">
+            <h2>⚙️ Панель Управления (Zero Trust C2)</h2>
+            <button class="btn-sm" id="btn-close-admin" style="background:#6366f1;">Вернуться в чат</button>
+        </div>
+        <div class="admin-content">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Пользователь</th>
+                        <th>Статус</th>
+                        <th>Последний вход</th>
+                        <th>Лог IP</th>
+                        <th>Управление</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-users-list"></tbody>
+            </table>
+
+            <div class="admin-card">
+                <h3>Создать новый инвайт</h3>
+                <p style="color:#94a3b8; font-size: 0.9em; margin-bottom: 10px;">Генерирует ссылку доступа для нового пользователя.</p>
+                <button class="btn-sm btn-primary" id="btn-generate-invite">+ Сгенерировать доступ</button>
+                <div class="invite-links" id="invite-links-display" style="display:none;"></div>
+            </div>
+
+            <div class="admin-card">
+                <h3>🔑 Управление Мастер-Ссылкой</h3>
+                <div class="flex-row">
+                    <input type="text" id="master-key-input" placeholder="Новый токен (MY-SECRET-KEY-777)">
+                    <button class="btn-sm" id="btn-change-master-key" style="background:#f59e0b; color:#000; font-weight:bold;">Обновить</button>
+                </div>
+                <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
+            </div>
+        </div>
+    </div>
 
     <script src="js/crypto.js"></script>
     <script src="js/config.js"></script>
