@@ -28,125 +28,55 @@
             <h2 id="auth-title">Активация доступа</h2>
             <p id="auth-subtitle"></p>
             
-            <div id="auth-warning" class="warning-box">
-                <span class="warning-title">⚠️ КРИТИЧЕСКИ ВАЖНО</span>
-                <ul class="warning-list">
-                    <li><b>Сбросить пароль невозможно!</b></li>
-                    <li>Все данные зашифрованы ключами Zero-Knowledge.</li>
-                    <li>Сохраните резервный код, иначе переписка будет утеряна.</li>
-                </ul>
+            <div id="auth-warning" style="display: none; background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.4); padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: left; line-height: 1.4;">
+                <span style="color: #f87171; font-weight: bold; display: block; margin-bottom: 5px;">⚠️ КРИТИЧЕСКИ ВАЖНО</span>
+                <span style="color: #cbd5e1; font-size: 0.85em;">Сохраните вашу <b>персональную ссылку</b>, <b>логин</b> и <b>пароль</b> в надежном месте. Мы используем сквозное шифрование (Zero-Knowledge). При утере этих данных ваша переписка не сможет быть дешифрована даже администратором.</span>
             </div>
 
-            <input type="text" id="reg-username" placeholder="Логин" autocomplete="off">
+            <input type="text" id="reg-username" placeholder="Логин">
             <input type="password" id="reg-password" placeholder="Секретный пароль">
-            <input type="password" id="reg-password-confirm" placeholder="Повторите пароль" style="display: none;">
-
-            <div id="auth-checkboxes" class="auth-options">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="reg-understand">
-                    <span>Я понимаю риски и буду хранить доступы надежно.</span>
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="reg-download" checked>
-                    <span>📥 Скачать файл восстановления (TXT)</span>
-                </label>
-            </div>
-
             <button id="btn-register">Войти</button>
         </div>
     </div>
 
     <div id="view-app" class="view">
         <div class="dashboard">
-            
-            <aside class="sidebar collapsed" id="main-sidebar">
+            <div class="sidebar">
                 <div class="sidebar-header">
-                    <button class="btn-icon" id="btn-toggle-sidebar" title="Свернуть/Развернуть">☰</button>
-                    <span class="sidebar-title">Ghost Core</span>
+                    <div>
+                        <div id="my-name-display">Загрузка...</div>
+                        <div class="btn-group">
+                            <button class="btn-sm logout" id="btn-logout">Выход</button>
+                            <button class="btn-sm admin-btn" id="btn-open-admin">⚙️ Админ</button>
+                        </div>
+                    </div>
                 </div>
-
-                <div class="sidebar-menu">
-                    <button class="menu-item active" id="tab-chats" title="Чаты и Контакты">
-                        <span class="menu-icon">💬</span>
-                        <span class="menu-label">Чаты / Контакты</span>
-                    </button>
-                    <button class="menu-item" id="btn-open-profile" title="Профиль">
-                        <span class="menu-icon">👤</span>
-                        <span class="menu-label">Мой профиль</span>
-                    </button>
-                    <button class="menu-item admin-only" id="btn-open-admin" style="display:none;" title="Панель C2">
-                        <span class="menu-icon">⚙️</span>
-                        <span class="menu-label">Панель Управления</span>
-                    </button>
-                </div>
-
                 <div class="contacts-list" id="contacts-list"></div>
-
-                <div class="sidebar-footer">
-                    <button class="menu-item logout" id="btn-logout" title="Выход">
-                        <span class="menu-icon">🚪</span>
-                        <span class="menu-label">Безопасный выход</span>
-                    </button>
-                </div>
-            </aside>
-
-            <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
-
-            <main class="chat-area">
-                <header class="chat-header">
-                    <div class="chat-header-left">
-                        <button class="btn-icon mobile-burger" id="btn-mobile-menu">☰</button>
+            </div>
+            <div class="chat-area">
+                <div class="chat-header">
+                    <div style="display:flex; align-items:center; gap:10px;">
                         <span id="chat-header-name">Выберите чат</span>
-                        <span id="crypto-badge" class="badge-secure" style="display:none;">🔒 E2EE</span>
+                        <span id="crypto-badge" style="display:none;">🔒 ECDH E2EE</span>
                     </div>
-                    <div id="chat-controls" class="chat-controls" style="display:none;">
-                        <select id="auto-clean-select" class="select-sm">
-                            <option value="0">⏱️ Выкл</option>
-                            <option value="3600000">⏱️ 1 час</option>
-                            <option value="86400000">⏱️ 24 часа</option>
+                    <div id="chat-controls" style="display:none; align-items:center; gap:10px;">
+                        <select id="auto-clean-select" class="btn-sm" style="background:var(--bg-main); border:1px solid var(--border-color); color:var(--text-secondary); outline:none;">
+                            <option value="0">⏱️ Автоочистка: Выкл</option>
+                            <option value="3600000">⏱️ Автоочистка: 1 час</option>
+                            <option value="86400000">⏱️ Автоочистка: 24 часа</option>
                         </select>
-                        <button class="btn-sm btn-danger" id="btn-clear-chat">🗑️ Очистить</button>
+                        <button class="btn-sm" id="btn-clear-chat" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">🗑️ Очистить</button>
                     </div>
-                </header>
-                
+                </div>
                 <div class="messages" id="messages-container">
                     <div class="empty-state">
-                        Zero-Knowledge Channel<br>
-                        <span style="font-size:0.75em; opacity: 0.6;">Ожидание выбора собеседника...</span>
+                        Защищенный канал связи<br>
+                        <span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span>
                     </div>
                 </div>
-                
                 <div class="chat-input-container" id="chat-input-area" style="display: none;">
-                    <textarea id="msg-input" placeholder="Сообщение... (Shift+Enter для переноса)" rows="1"></textarea>
+                    <textarea id="msg-input" placeholder="Введите сообщение... (Shift+Enter для переноса)" rows="1"></textarea>
                     <button id="btn-send">➤</button>
-                </div>
-            </main>
-        </div>
-    </div>
-
-    <div id="modal-profile" class="modal-overlay" style="display: none;">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h3>👤 Мой Профиль</h3>
-                <button class="btn-icon" id="btn-close-profile">✖</button>
-            </header>
-            <div class="modal-body">
-                <div class="profile-field">
-                    <label>Отображаемое имя:</label>
-                    <div id="prof-display-name" class="field-value">-</div>
-                </div>
-                <div class="profile-field">
-                    <label>Ghost ID (Публичный):</label>
-                    <div class="flex-row">
-                        <div id="prof-display-id" class="field-value code-font">-</div>
-                        <button class="btn-sm" id="btn-copy-id">📋</button>
-                    </div>
-                </div>
-                <hr class="divider">
-                <div class="profile-field">
-                    <label>Безопасность:</label>
-                    <p style="font-size: 0.75em; color: var(--text-secondary); margin: 0 0 10px 0;">Генерация нового кода восстановления деактивирует старый.</p>
-                    <button class="btn-sm btn-primary w-100" id="btn-download-recovery">🔑 Сгенерировать новый код восстановления</button>
                 </div>
             </div>
         </div>
@@ -174,14 +104,14 @@
             <div class="admin-card">
                 <h3>Создать новый инвайт</h3>
                 <p style="color:#94a3b8; font-size: 0.9em; margin-bottom: 10px;">Генерирует ссылку доступа для нового пользователя.</p>
-                <button class="btn-sm btn-primary" id="btn-generate-invite">+ Сгенерировать доступ</button>
+                <button class="btn-sm" id="btn-generate-invite" style="background: #6366f1; padding: 10px 20px;">+ Сгенерировать доступ</button>
                 <div class="invite-links" id="invite-links-display" style="display:none;"></div>
             </div>
 
             <div class="admin-card">
-                <h3>🔑 Управление Мастер-Ссылкой</h3>
+                <h3>🔑 Управление Мастер-Ссылкой Админа</h3>
                 <div class="flex-row">
-                    <input type="text" id="master-key-input" placeholder="Новый токен (MY-SECRET-KEY-777)">
+                    <input type="text" id="master-key-input" placeholder="Новый токен (например: MY-SECRET-KEY-777)">
                     <button class="btn-sm" id="btn-change-master-key" style="background:#f59e0b; color:#000; font-weight:bold;">Обновить</button>
                 </div>
                 <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
