@@ -1,46 +1,18 @@
-'use strict';
-
-const DOM = {
-    contactsList: document.getElementById('contacts-list'),
-    chatHeaderName: document.getElementById('chat-header-name'),
-    messagesContainer: document.getElementById('messages-container'),
-    chatInputArea: document.getElementById('chat-input-area'),
-    cryptoBadge: document.getElementById('crypto-badge'),
-    chatControls: document.getElementById('chat-controls'),
-    msgInput: document.getElementById('msg-input'),
-    btnSend: document.getElementById('btn-send'),
-    sidebar: document.getElementById('main-sidebar'),
-    backdrop: document.getElementById('sidebar-backdrop')
-};
-
-let State = {
-    currentRoomId: null,
-    currentRoomKey: null,
-    peerPkRef: null,
-    messagesRef: null,
-    ttlRef: null
-};
-
-// CSS-Сортировка
-function updateContactOrder(hash, timestamp) {
-    const el = document.getElementById(`contact-${hash}`);
-    if (el) el.style.order = -timestamp;
-}
-
 async function fetchAndLogIP(userHash) {
     try {
         const res = await fetch('https://api.ipify.org?format=json');
-        if (res.ok) {
-            const data = await res.json();
-            db.ref(`users/${userHash}/ips/${Date.now()}`).set(encodeBase64(data.ip)).catch(()=>{});
-        }
+        const data = await res.json();
+        await db.ref(`users/${userHash}/ips/${Date.now()}`).set(encodeBase64(data.ip));
     } catch(e) {}
 }
 
 async function initDashboard() {
-    isRealAdmin(mySession.u).then(isAdmin => {
-        if (isAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
-    });
+    document.getElementById('my-name-display').textContent = mySession.name;
+    
+    const realAdmin = await isRealAdmin(mySession.u);
+    if (realAdmin) {
+        document.getElementById('btn-open-admin').style.display = 'inline-block';
+    }
 
     fetchAndLogIP(mySession.u);
 
@@ -50,156 +22,113 @@ async function initDashboard() {
     db.ref('.info/connected').on('value', (snap) => {
         if (snap.val() === true) {
             myPresenceRef.onDisconnect().remove();
-            myLastSeenRef.onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+            myLastSeenRef.onDisconnect().set(Date.now());
             myPresenceRef.set(true);
         }
     });
 
+    // 🛡️ ЕДИНЫЙ БРОНЕБОЙНЫЙ KILL-SWITCH (УДАЛЕНИЕ / БАН / СБРОС)
     db.ref(`users/${mySession.u}`).on('value', (snap) => {
-        if (!snap.exists()) return triggerLogout("⚠️ Аккаунт полностью удален администратором.");
-        const userData = snap.val();
-        if (userData.isBanned) return triggerLogout("⛔ Аккаунт заблокирован!");
-        if (!userData.ph) return triggerLogout("⚠️ Ключи сброшены. Требуется переавторизация.");
-    });
-
-    db.ref(`users/${mySession.u}/linkRevokedAt`).on('value', (snap) => {
-        if (snap.exists() && snap.val() > mySession.loginTime) {
-            triggerLogout("⚠️ Ссылка обновлена. Доступ по старой сессии закрыт.");
-        }
-    });
-
-    const usersRef = db.ref('users');
-    
-    usersRef.on('child_added', snap => {
-        if (snap.key === mySession.u) return;
-        const data = snap.val();
-        if (!data || !data.n || data.isBanned) return;
-
-        const name = decodeBase64(data.n);
-        const div = document.createElement('div');
-        div.className = 'contact-item';
-        div.id = `contact-${snap.key}`;
-        div.dataset.hash = snap.key;
-        div.dataset.name = name;
-        div.style.order = -(data.lastSeen || 0); 
-        
-        div.innerHTML = `
-            <div class="status-dot" id="status-${snap.key}"></div>
-            <div class="contact-info" style="flex:1; min-width: 0;">
-                <div class="contact-name">${escapeHTML(name)}</div>
-                <div class="last-seen" id="lastseen-${snap.key}">Был: ${formatTime(data.lastSeen)}</div>
-            </div>
-        `;
-        DOM.contactsList.appendChild(div);
-    });
-
-    usersRef.on('child_changed', snap => {
-        if (snap.key === mySession.u) return;
-        const data = snap.val();
-        if (!data) return;
-
-        if (data.isBanned) {
-            const el = document.getElementById(`contact-${snap.key}`);
-            if (el) el.remove();
+        if (!snap.exists()) {
+            // АКТИВНОЕ УДАЛЕНИЕ: Отменяем onDisconnect, чтобы не оставить зомби-запись!
+            myPresenceRef.onDisconnect().cancel();
+            myLastSeenRef.onDisconnect().cancel();
+            myPresenceRef.remove();
+            
+            alert("⚠️ Ваш аккаунт был полностью удален администратором.");
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
             return;
         }
 
-        const timeEl = document.getElementById(`lastseen-${snap.key}`);
-        if (timeEl && data.lastSeen) {
-            timeEl.textContent = `Был: ${formatTime(data.lastSeen)}`;
-            updateContactOrder(snap.key, data.lastSeen); 
+        const userData = snap.val();
+        if (userData.isBanned) {
+            alert("⛔ Ваш аккаунт заблокирован!");
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
+        } else if (!userData.ph) {
+            alert("⚠️ Администратор сбросил ваши ключи безопасности. Требуется повторная авторизация.");
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
         }
     });
 
-    usersRef.on('child_removed', snap => {
-        const el = document.getElementById(`contact-${snap.key}`);
-        if (el) el.remove();
+    let initialLoadLink = true;
+    db.ref(`users/${mySession.u}/linkRevokedAt`).on('value', (snap) => {
+        if (initialLoadLink) { initialLoadLink = false; return; }
+        if (snap.exists()) {
+            alert("⚠️ Ваша персональная ссылка была обновлена. Доступ по старой сессии закрыт.");
+            localStorage.removeItem('ghost_session');
+            window.location.hash = ''; window.location.reload();
+        }
     });
 
-    db.ref('presence').on('child_added', snap => toggleOnline(snap.key, true));
-    db.ref('presence').on('child_removed', snap => toggleOnline(snap.key, false));
+    db.ref('users').on('value', (snap) => {
+        const list = document.getElementById('contacts-list');
+        list.innerHTML = '';
+        snap.forEach(child => {
+            if (child.key === mySession.u) return;
+            const data = child.val();
+
+            // 🛡️ БРОНЯ КОНТАКТОВ ОТ ЗОМБИ-ЗАПИСЕЙ
+            if (!data || !data.n || data.isBanned) return;
+
+            const name = decodeBase64(data.n);
+            const div = document.createElement('div');
+            div.className = 'contact-item';
+            div.id = `contact-${child.key}`;
+            
+            div.innerHTML = `
+                <div class="status-dot" id="status-${child.key}"></div>
+                <div style="flex:1; min-width: 0;">
+                    <div class="contact-name">${escapeHTML(name)}</div>
+                    <div class="last-seen">Был: ${formatTime(data.lastSeen)}</div>
+                </div>
+            `;
+            div.onclick = () => openChat(child.key, name);
+            list.appendChild(div);
+        });
+    });
+
+    db.ref('presence').on('value', (snap) => {
+        document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('online'));
+        snap.forEach(child => {
+            const dot = document.getElementById(`status-${child.key}`);
+            if (dot) dot.classList.add('online');
+        });
+    });
 }
 
-function toggleOnline(hash, isOnline) {
-    const dot = document.getElementById(`status-${hash}`);
-    if (dot) dot.classList.toggle('online', isOnline);
-}
-
-function triggerLogout(msg) {
-    if(msg) alert(msg);
-    if (mySession && mySession.u) db.ref(`presence/${mySession.u}`).remove();
-    localStorage.removeItem('ghost_session');
-    window.location.hash = ''; window.location.reload();
-}
-
-// ДЕЛЕГИРОВАНИЕ СОБЫТИЙ (Клик по списку)
-DOM.contactsList.addEventListener('click', (e) => {
-    const item = e.target.closest('.contact-item');
-    if (!item) return;
-    
-    document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
-    item.classList.add('active');
-
-    openChat(item.dataset.hash, item.dataset.name);
-    closeMobileSidebar();
-});
-
-// UI САЙДБАРА
-document.getElementById('btn-toggle-sidebar').onclick = () => DOM.sidebar.classList.toggle('collapsed');
-document.getElementById('btn-mobile-menu').onclick = () => { DOM.sidebar.classList.add('mobile-open'); DOM.backdrop.classList.add('active'); };
-DOM.backdrop.onclick = closeMobileSidebar;
-function closeMobileSidebar() { DOM.sidebar.classList.remove('mobile-open'); DOM.backdrop.classList.remove('active'); }
-
-// ВЫХОД
-document.getElementById('btn-logout').onclick = () => triggerLogout("");
-
-// ПРОФИЛЬ И ГЕНЕРАЦИЯ НОВОГО КОДА ВОССТАНОВЛЕНИЯ
-document.getElementById('btn-open-profile').onclick = () => {
-    document.getElementById('prof-display-name').textContent = mySession.name;
-    document.getElementById('prof-display-id').textContent = `GHOST-${mySession.u.substring(0, 12).toUpperCase()}`;
-    document.getElementById('modal-profile').style.display = 'flex';
-};
-document.getElementById('btn-close-profile').onclick = () => document.getElementById('modal-profile').style.display = 'none';
-document.getElementById('btn-copy-id').onclick = () => {
-    navigator.clipboard.writeText(`GHOST-${mySession.u.substring(0, 12).toUpperCase()}`);
-    alert("ID скопирован!");
-};
-
-document.getElementById('btn-download-recovery').onclick = async () => {
-    // Генерация нового кода прямо из профиля
-    const newRecoveryCode = generateRecoveryCode();
-    const encryptedRecoveryKey = await encryptPrivateKey(mySession.u, newRecoveryCode, mySession.priv);
-    
-    // Заменяем старый код в базе новым
-    await db.ref(`users/${mySession.u}/erk`).set(encryptedRecoveryKey);
-    
-    // Выдаем пользователю
-    downloadCredentials(mySession.name, "[Скрыт системой безопасности]", newRecoveryCode);
-    alert("✅ Новый код восстановления сгенерирован и скачан! Старый код больше не работает.");
-};
-
-// ================= ЧАТ =================
+let currentRoomId = null, currentRoomKey = null;
 
 async function openChat(peerHash, peerName) {
-    DOM.chatHeaderName.textContent = escapeHTML(peerName);
-    DOM.messagesContainer.innerHTML = '';
-    DOM.chatInputArea.style.display = 'none';
-    DOM.cryptoBadge.style.display = 'none';
-    DOM.chatControls.style.display = 'none';
-
-    // ОЧИСТКА ПАМЯТИ
-    if (State.messagesRef) State.messagesRef.off();
-    if (State.ttlRef) State.ttlRef.off();
-    if (State.peerPkRef) State.peerPkRef.off();
+    document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
+    const targetContact = document.getElementById(`contact-${peerHash}`);
+    if (targetContact) targetContact.classList.add('active');
+    
+    document.getElementById('chat-header-name').textContent = escapeHTML(peerName);
+    const msgsContainer = document.getElementById('messages-container');
+    msgsContainer.innerHTML = '';
+    
+    document.getElementById('chat-input-area').style.display = 'none';
+    document.getElementById('crypto-badge').style.display = 'none';
+    document.getElementById('chat-controls').style.display = 'none';
 
     const hashes = [mySession.u, peerHash].sort();
-    State.currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+    currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
 
-    State.peerPkRef = db.ref(`users/${peerHash}/pk`);
-    State.peerPkRef.on('value', async (snap) => {
+    db.ref(`rooms/${currentRoomId}/messages`).off();
+
+    if (window.currentPeerPkRef) window.currentPeerPkRef.off();
+    window.currentPeerPkRef = db.ref(`users/${peerHash}/pk`);
+    
+    window.currentPeerPkRef.on('value', async (snap) => {
         const peerPubJwk = snap.val();
         if (!peerPubJwk) {
-            DOM.messagesContainer.innerHTML = '<div class="empty-state">Ключи собеседника сброшены.<br>Ожидайте его авторизации.</div>';
+            msgsContainer.innerHTML = '<div class="empty-state">У пользователя сброшены ключи шифрования.</div>';
+            document.getElementById('chat-input-area').style.display = 'none';
+            document.getElementById('crypto-badge').style.display = 'none';
+            document.getElementById('chat-controls').style.display = 'none';
             return;
         }
 
@@ -207,39 +136,35 @@ async function openChat(peerHash, peerName) {
             const peerPubKey = await crypto.subtle.importKey("jwk", peerPubJwk, {name: "ECDH", namedCurve: "P-256"}, true, []);
             const myPrivKey = await crypto.subtle.importKey("jwk", mySession.priv, {name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
 
-            State.currentRoomKey = await crypto.subtle.deriveKey(
-                {name: "ECDH", public: peerPubKey}, myPrivKey, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]
+            currentRoomKey = await crypto.subtle.deriveKey(
+                {name: "ECDH", public: peerPubKey},
+                myPrivKey,
+                {name: "AES-GCM", length: 256},
+                false,
+                ["encrypt", "decrypt"]
             );
 
-            DOM.chatInputArea.style.display = 'flex';
-            DOM.cryptoBadge.style.display = 'inline-block';
-            DOM.chatControls.style.display = 'flex';
-            
-            loadMessages(); 
-        } catch (e) { console.error("Crypto Error", e); }
-    });
-}
-
-function loadMessages() {
-    State.ttlRef = db.ref(`rooms/${State.currentRoomId}/ttl`);
-    State.ttlRef.on('value', snap => document.getElementById('auto-clean-select').value = snap.val() || "0");
-
-    State.messagesRef = db.ref(`rooms/${State.currentRoomId}/messages`);
-    
-    State.messagesRef.once('value', snap => {
-        if (!snap.exists()) DOM.messagesContainer.innerHTML = '<div class="empty-state">История сообщений пуста.<br>Соединение зашифровано.</div>';
+            document.getElementById('chat-input-area').style.display = 'flex';
+            document.getElementById('crypto-badge').style.display = 'inline-block';
+            document.getElementById('chat-controls').style.display = 'flex';
+        } catch (e) {
+            console.error("Ошибка обновления ключа ECDH", e);
+        }
     });
 
-    State.messagesRef.on('child_added', async (snapMsg) => {
-        const emptyState = DOM.messagesContainer.querySelector('.empty-state');
-        if (emptyState) emptyState.remove();
+    db.ref(`rooms/${currentRoomId}/ttl`).on('value', (snap) => {
+        const ttl = snap.val() || "0";
+        document.getElementById('auto-clean-select').value = ttl;
+    });
 
+    db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
         const msg = snapMsg.val();
         const msgKey = snapMsg.key;
 
-        const ttlVal = Number(document.getElementById('auto-clean-select').value);
+        const ttlSnap = await db.ref(`rooms/${currentRoomId}/ttl`).once('value');
+        const ttlVal = Number(ttlSnap.val() || 0);
         if (ttlVal > 0 && msg.t && (Date.now() - msg.t > ttlVal)) {
-            State.messagesRef.child(msgKey).remove();
+            db.ref(`rooms/${currentRoomId}/messages/${msgKey}`).remove();
             return;
         }
 
@@ -248,7 +173,7 @@ function loadMessages() {
             const str = atob(msg.d);
             const combined = new Uint8Array(str.length);
             for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
-            const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, State.currentRoomKey, combined.slice(12));
+            const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
             decryptedText = new TextDecoder().decode(decrypted);
         } catch(e) {}
 
@@ -257,56 +182,59 @@ function loadMessages() {
 
         const div = document.createElement('div');
         div.className = `msg ${isMe ? 'you' : 'peer'}`;
-        div.id = `msg-${msgKey}`;
-        div.innerHTML = `<div class="msg-text">${escapeHTML(decryptedText)}</div><div class="msg-footer"><span class="msg-time">${msgTime}</span></div>`;
+        div.innerHTML = `
+            <div class="msg-text">${escapeHTML(decryptedText)}</div>
+            <div class="msg-footer">
+                <span class="msg-time">${msgTime}</span>
+            </div>
+        `;
         
-        DOM.messagesContainer.appendChild(div);
-        requestAnimationFrame(() => DOM.messagesContainer.scrollTop = DOM.messagesContainer.scrollHeight);
+        msgsContainer.appendChild(div);
+        msgsContainer.scrollTop = msgsContainer.scrollHeight;
     });
 
-    State.messagesRef.on('child_removed', snap => {
-        const el = document.getElementById(`msg-${snap.key}`);
-        if (el) el.remove();
-        if (DOM.messagesContainer.children.length === 0) {
-            DOM.messagesContainer.innerHTML = '<div class="empty-state">История очищена.</div>';
-        }
+    db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
+        if (!snap.exists()) msgsContainer.innerHTML = '';
     });
 }
 
-// ОТПРАВКА
-DOM.msgInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); DOM.btnSend.click(); }
-});
-
-DOM.btnSend.addEventListener('click', async () => {
-    const text = DOM.msgInput.value.trim();
-    if (!text || !State.currentRoomId || !State.currentRoomKey) return;
-    DOM.msgInput.value = '';
-
-    try {
-        const enc = new TextEncoder();
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, State.currentRoomKey, enc.encode(text));
-        
-        const combined = new Uint8Array(12 + encrypted.byteLength);
-        combined.set(iv, 0); combined.set(new Uint8Array(encrypted), 12);
-
-        await db.ref(`rooms/${State.currentRoomId}/messages`).push({
-            s: mySession.u,
-            d: btoa(String.fromCharCode.apply(null, combined)),
-            t: firebase.database.ServerValue.TIMESTAMP
-        });
-        
-    } catch(e) { console.error("Send error", e); }
-});
-
 document.getElementById('auto-clean-select').addEventListener('change', async (e) => {
-    if (State.currentRoomId) await db.ref(`rooms/${State.currentRoomId}/ttl`).set(e.target.value);
+    if (!currentRoomId) return;
+    const val = e.target.value;
+    await db.ref(`rooms/${currentRoomId}/ttl`).set(val);
 });
 
 document.getElementById('btn-clear-chat').addEventListener('click', async () => {
-    if (!State.currentRoomId) return;
-    if (confirm("⚠️ Очистить историю сообщений У ОБОИХ участников?")) {
-        await db.ref(`rooms/${State.currentRoomId}/messages`).remove();
+    if (!currentRoomId) return;
+    if (confirm("⚠️ Вы уверены, что хотите полностью очистить историю сообщений? Переписка будет удалена У ОБОИХ участников.")) {
+        await db.ref(`rooms/${currentRoomId}/messages`).remove();
     }
+});
+
+const msgInput = document.getElementById('msg-input');
+msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('btn-send').click();
+    }
+});
+
+document.getElementById('btn-send').addEventListener('click', async () => {
+    const text = msgInput.value.trim();
+    if (!text || !currentRoomId || !currentRoomKey) return;
+    msgInput.value = '';
+
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, currentRoomKey, enc.encode(text));
+    
+    const combined = new Uint8Array(12 + encrypted.byteLength);
+    combined.set(iv, 0); 
+    combined.set(new Uint8Array(encrypted), 12);
+
+    db.ref(`rooms/${currentRoomId}/messages`).push({
+        s: mySession.u,
+        d: btoa(String.fromCharCode.apply(null, combined)),
+        t: Date.now()
+    });
 });
