@@ -1,3 +1,5 @@
+'use strict';
+
 document.getElementById('btn-open-admin').onclick = () => window.location.hash = '#/admin';
 document.getElementById('btn-close-admin').onclick = () => window.location.hash = '#/app';
 
@@ -16,8 +18,6 @@ function initAdminPanel() {
             const data = child.val();
             const hash = child.key;
 
-            // 🛡️ БРОНЯ ОТ ЗОМБИ-ЗАПИСЕЙ (ФАНТОМОВ)
-            // Если узел поврежден или не имеет имени, удаляем этот мусор и пропускаем
             if (!data || !data.n) {
                 db.ref(`users/${hash}`).remove();
                 return;
@@ -43,7 +43,7 @@ function initAdminPanel() {
                         ? `<button class="btn-unban" onclick="toggleBan('${hash}', false)">Разбанить</button>` 
                         : `<button class="btn-ban" onclick="toggleBan('${hash}', true)">Забанить</button>`}
                     <button class="btn-edit" onclick="editUser('${hash}', '${escapeHTML(name)}')">✏️ Имя</button>
-                    <button class="btn-sm" style="background:#f59e0b; color:#000;" onclick="resetPassword('${hash}')">🔑 Сброс пароля</button>
+                    <button class="btn-sm" style="background:#f59e0b; color:#000;" onclick="resetPassword('${hash}')">🔑 Сброс ключей</button>
                     <button class="btn-sm" style="background:#6366f1;" onclick="regenerateUserLink('${hash}')">🔄 Ссылка</button>
                     <button class="btn-delete" onclick="deleteUserCompletely('${hash}')">❌ Удалить</button>
                 </td>
@@ -51,12 +51,6 @@ function initAdminPanel() {
             tbody.appendChild(tr);
         });
     });
-}
-
-function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-    );
 }
 
 window.toggleBan = async function(userHash, state) {
@@ -73,13 +67,14 @@ window.editUser = async function(userHash, currentName) {
 };
 
 window.resetPassword = async function(userHash) {
-    const msg = "ВНИМАНИЕ: Сброс пароля сотрет крипто-ключи пользователя (End-to-End). Он сможет войти и придумать новый пароль, но СТАРЫЕ ЧАТЫ СТАНУТ НЕЧИТАЕМЫМИ.\n\nПродолжить сброс?";
+    const msg = "Сброс сотрет крипто-ключи пользователя (End-to-End). СТАРЫЕ ЧАТЫ СТАНУТ НЕЧИТАЕМЫМИ.\n\nПродолжить?";
     if (!confirm(msg)) return;
 
     await db.ref(`users/${userHash}/ph`).remove();
     await db.ref(`users/${userHash}/pk`).remove();
     await db.ref(`users/${userHash}/epk`).remove();
-    alert("Ключи сброшены. При следующем входе по своей ссылке пользователь должен задать новый пароль.");
+    await db.ref(`users/${userHash}/erk`).remove();
+    alert("Ключи сброшены.");
 };
 
 window.deleteUserCompletely = async function(userHash) {
@@ -96,7 +91,7 @@ window.deleteUserCompletely = async function(userHash) {
 };
 
 window.regenerateUserLink = async function(userHash) {
-    if(!confirm("Математика Zero-Knowledge запрещает хранить ссылки в открытом виде. Старая ссылка сгорит (404), будет сгенерирована новая. Продолжить?")) return;
+    if(!confirm("Старая ссылка сгорит (404), будет сгенерирована новая. Продолжить?")) return;
 
     const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
     const hashedToken = await sha256(rawToken);
@@ -116,7 +111,7 @@ window.regenerateUserLink = async function(userHash) {
 
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    display.innerHTML = `✅ Новая персональная ссылка пользователя:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    display.innerHTML = `✅ Новая ссылка пользователя:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 };
 
 document.getElementById('btn-generate-invite').addEventListener('click', async () => {
@@ -126,20 +121,18 @@ document.getElementById('btn-generate-invite').addEventListener('click', async (
     
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    display.innerHTML = "Разошлите одну из ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 });
 
 document.getElementById('btn-change-master-key').addEventListener('click', async () => {
     const newToken = document.getElementById('master-key-input').value.trim();
-    if (newToken.length < 6) return alert("Токен должен быть не менее 6 символов!");
+    if (newToken.length < 6) return alert("Токен от 6 символов!");
 
     const newHash = await sha256(newToken);
     await db.ref('admin_master_hash').set(newHash);
     
     const statusDiv = document.getElementById('master-key-status');
     statusDiv.style.color = '#22c55e';
-    statusDiv.innerHTML = `✅ Мастер-ключ обновлен! Новая ссылка админа:<br><strong>${window.location.origin}${window.location.pathname}#/root-key/${newToken}</strong>`;
+    statusDiv.innerHTML = `✅ Ключ обновлен:<br><strong>${window.location.origin}${window.location.pathname}#/root-key/${newToken}</strong>`;
     document.getElementById('master-key-input').value = '';
 });
-
-handleRoute();
