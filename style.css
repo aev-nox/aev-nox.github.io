@@ -55,6 +55,7 @@ body { background-color: #ffffff; color: #000; }
 
 .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 
+/* 🔥 УБРАНА АНИМАЦИЯ: Теперь сообщения появляются аппаратно-быстро и без лагов */
 .msg { 
     max-width: 80%; 
     width: fit-content;
@@ -64,9 +65,7 @@ body { background-color: #ffffff; color: #000; }
     display: flex;
     flex-direction: column;
     gap: 4px;
-    animation: fadeIn 0.15s ease-out;
 }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
 .msg.you { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 2px; }
 .msg.peer { align-self: flex-start; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color); border-bottom-left-radius: 2px; }
