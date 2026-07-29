@@ -55,7 +55,6 @@ body { background-color: #ffffff; color: #000; }
 
 .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 
-/* 🔥 УБРАНА АНИМАЦИЯ: Теперь сообщения появляются аппаратно-быстро и без лагов */
 .msg { 
     max-width: 80%; 
     width: fit-content;
@@ -108,6 +107,14 @@ button.admin-btn { background: #f59e0b; color: #000; font-weight: bold; display:
 .invite-links { background: var(--bg-main); padding: 12px; border-radius: 6px; margin-top: 10px; font-family: monospace; color: var(--success); white-space: pre-wrap; word-wrap: break-word; border: 1px solid var(--border-color); }
 .flex-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap;}
 .flex-row input { background: var(--bg-main); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; flex: 1; min-width: 200px; outline: none; }
+
+/* 🔥 СТИЛИ МОДАЛЬНОГО ОКНА */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100%; height: 100dvh; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(3px); }
+.modal-box { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; width: 90%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6); animation: modalFadeIn 0.2s ease-out; box-sizing: border-box; }
+@keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+.custom-checkbox { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; margin-bottom: 12px; user-select: none; }
+.custom-checkbox input { margin-top: 3px; cursor: pointer; width: 18px; height: 18px; accent-color: #ef4444; flex-shrink: 0; }
+.custom-checkbox span { font-size: 0.9em; color: var(--text-primary); line-height: 1.4; }
 
 @media (max-width: 768px) {
     .dashboard { border: none; }
