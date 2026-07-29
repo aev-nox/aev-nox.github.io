@@ -29,12 +29,22 @@
             <p id="auth-subtitle"></p>
             
             <div id="auth-warning" style="display: none; background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.4); padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: left; line-height: 1.4;">
-                <span style="color: #f87171; font-weight: bold; display: block; margin-bottom: 5px;">⚠️ КРИТИЧЕСКИ ВАЖНО</span>
-                <span style="color: #cbd5e1; font-size: 0.85em;">Сохраните вашу <b>персональную ссылку</b>, <b>логин</b> и <b>пароль</b> в надежном месте. Мы используем сквозное шифрование (Zero-Knowledge). При утере этих данных ваша переписка не сможет быть дешифрована даже администратором.</span>
+                <span style="color: #f87171; font-weight: bold; display: block; margin-bottom: 8px;">⚠️ ВНИМАНИЕ ОЧЕНЬ ВАЖНО:</span>
+                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 1. Попасть в чат возможно только по ссылке которую вам выдали.</span>
+                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 2. Сбросить или восстановить ваш пароль не сможет даже администратор!</span>
+                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 3. Переписка шифруется паролем, при потере пароля -> восстановить переписку будет невозможно!</span>
+                <span style="color: #cbd5e1; font-size: 0.85em; display: block;">- 4. Пожалуйста, сохраните ваш ПАРОЛЬ и ССЫЛКУ доступа, в надежном месте.</span>
             </div>
 
             <input type="text" id="reg-username" placeholder="Логин">
             <input type="password" id="reg-password" placeholder="Секретный пароль">
+            <input type="password" id="reg-password-confirm" placeholder="Повторите пароль" style="display: none;">
+            
+            <div id="auth-checkbox-container" style="display: none; align-items: flex-start; gap: 8px; margin-top: 5px; margin-bottom: 10px; text-align: left;">
+                <input type="checkbox" id="reg-checkbox" style="margin-top: 3px; cursor: pointer;">
+                <label for="reg-checkbox" style="font-size: 0.85em; color: #cbd5e1; line-height: 1.3; cursor: pointer; user-select: none;">Я внимательно прочитал то что написано выше, я сохраню ссылку и пароль, в надежном месте.</label>
+            </div>
+
             <button id="btn-register">Войти</button>
         </div>
     </div>
