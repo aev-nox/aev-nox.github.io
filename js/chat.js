@@ -160,33 +160,18 @@ window.addContact = async function(hash, name) {
     openChat(hash, name);
 };
 
-window.deleteContact = async function(peerHash) {
-    if (confirm("Удалить пользователя из списка контактов?")) {
-        const clearChat = confirm("Очистить историю переписки у обоих участников? (Да/Нет)");
-        
-        await db.ref(`users/${mySession.u}/contacts/${peerHash}`).remove();
-        await db.ref(`users/${peerHash}/contacts/${mySession.u}`).remove();
-        
-        const hashes = [mySession.u, peerHash].sort();
-        const targetRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+// 🔥 НОВАЯ ЛОГИКА ВЫЗОВА МОДАЛЬНОГО ОКНА УДАЛЕНИЯ
+let targetUserToDelete = null;
 
-        if (clearChat) {
-            await db.ref(`rooms/${targetRoomId}`).remove();
-        }
-        
-        if (currentRoomId === targetRoomId) {
-            document.querySelector('.dashboard').classList.remove('mobile-chat-active');
-            db.ref(`rooms/${currentRoomId}/messages`).off();
-            db.ref(`rooms/${currentRoomId}/ttl`).off();
-            currentRoomId = null;
-            currentRoomKey = null;
-            document.getElementById('chat-header-name').textContent = "Выберите чат";
-            document.getElementById('messages-container').innerHTML = '<div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>';
-            document.getElementById('chat-input-area').style.display = 'none';
-            document.getElementById('crypto-badge').style.display = 'none';
-            document.getElementById('chat-controls').style.display = 'none';
-        }
-    }
+window.deleteContact = function(peerHash) {
+    targetUserToDelete = peerHash;
+    
+    // Сбрасываем галочки в положение "включено" при каждом открытии
+    document.getElementById('cb-delete-contact').checked = true;
+    document.getElementById('cb-clear-chat').checked = true;
+    
+    // Показываем наше красивое модальное окно
+    document.getElementById('modal-delete-contact').style.display = 'flex';
 };
 
 let currentRoomId = null, currentRoomKey = null;
@@ -286,8 +271,6 @@ async function openChat(peerHash, peerName) {
         
         msgsContainer.appendChild(div);
         
-        // 🔥 МАКСИМАЛЬНАЯ НАДЕЖНОСТЬ: Выполняем скролл "пачкой" (Debounce)
-        // Если пришло 100 сообщений разом, скролл сработает только 1 раз в конце.
         clearTimeout(window.chatScrollTimeout);
         window.chatScrollTimeout = setTimeout(() => {
             msgsContainer.scrollTop = msgsContainer.scrollHeight;
@@ -364,4 +347,50 @@ document.getElementById('btn-send').addEventListener('click', async () => {
         d: btoa(String.fromCharCode.apply(null, combined)),
         t: Date.now()
     });
+});
+
+// 🔥 ОБРАБОТЧИКИ НАЖАТИЙ ДЛЯ НОВОГО МОДАЛЬНОГО ОКНА УДАЛЕНИЯ
+document.getElementById('btn-cancel-delete').addEventListener('click', () => {
+    document.getElementById('modal-delete-contact').style.display = 'none';
+    targetUserToDelete = null; // Сбрасываем цель
+});
+
+document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
+    if (!targetUserToDelete) return;
+    
+    const shouldDeleteContact = document.getElementById('cb-delete-contact').checked;
+    const shouldClearChat = document.getElementById('cb-clear-chat').checked;
+    const peerHash = targetUserToDelete;
+    
+    // Прячем окно
+    document.getElementById('modal-delete-contact').style.display = 'none';
+    targetUserToDelete = null;
+
+    // 1. Если отмечена первая галочка — удаляем контакт у обоих
+    if (shouldDeleteContact) {
+        await db.ref(`users/${mySession.u}/contacts/${peerHash}`).remove();
+        await db.ref(`users/${peerHash}/contacts/${mySession.u}`).remove();
+    }
+
+    const hashes = [mySession.u, peerHash].sort();
+    const targetRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+
+    // 2. Если отмечена вторая галочка — стираем сообщения навсегда
+    if (shouldClearChat) {
+        await db.ref(`rooms/${targetRoomId}`).remove();
+    }
+
+    // 3. Закрываем окно чата, если мы сейчас в нем находимся и удалили его
+    if ((shouldDeleteContact || shouldClearChat) && currentRoomId === targetRoomId) {
+        document.querySelector('.dashboard').classList.remove('mobile-chat-active');
+        db.ref(`rooms/${currentRoomId}/messages`).off();
+        db.ref(`rooms/${currentRoomId}/ttl`).off();
+        currentRoomId = null;
+        currentRoomKey = null;
+        document.getElementById('chat-header-name').textContent = "Выберите чат";
+        document.getElementById('messages-container').innerHTML = '<div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>';
+        document.getElementById('chat-input-area').style.display = 'none';
+        document.getElementById('crypto-badge').style.display = 'none';
+        document.getElementById('chat-controls').style.display = 'none';
+    }
 });
