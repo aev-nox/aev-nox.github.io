@@ -286,8 +286,8 @@ async function openChat(peerHash, peerName) {
         
         msgsContainer.appendChild(div);
         
-        // 🔥 ИСПРАВЛЕНИЕ: Плавная прокрутка вниз при новом сообщении
-        msgsContainer.scrollTo({ top: msgsContainer.scrollHeight, behavior: 'smooth' });
+        // 🔥 НАДЕЖНЫЙ МГНОВЕННЫЙ СКРОЛЛ (Без лагов)
+        msgsContainer.scrollTop = msgsContainer.scrollHeight;
     });
 
     db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
@@ -325,13 +325,12 @@ document.getElementById('btn-clear-chat').addEventListener('click', async () => 
     }
 });
 
-// 🔥 ИСПРАВЛЕНИЕ: Умное поле ввода (Auto-resize)
 const msgInput = document.getElementById('msg-input');
 
 msgInput.addEventListener('input', function() {
-    this.style.height = 'auto'; // Сбрасываем высоту для пересчета
-    this.style.height = (this.scrollHeight) + 'px'; // Устанавливаем по размеру контента
-    if (this.value === '') this.style.height = 'auto'; // Сброс при пустом поле
+    this.style.height = 'auto'; 
+    this.style.height = (this.scrollHeight) + 'px'; 
+    if (this.value === '') this.style.height = 'auto'; 
 });
 
 msgInput.addEventListener('keydown', (e) => {
@@ -346,7 +345,7 @@ document.getElementById('btn-send').addEventListener('click', async () => {
     if (!text || !currentRoomId || !currentRoomKey) return;
     
     msgInput.value = '';
-    msgInput.style.height = 'auto'; // Сбрасываем высоту поля после отправки
+    msgInput.style.height = 'auto'; 
 
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12));
