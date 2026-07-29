@@ -1,10 +1,7 @@
-async function fetchAndLogIP(userHash) {
-    try {
-        const res = await fetch('https://api.ipify.org?format=json');
-        const data = await res.json();
-        await db.ref(`users/${userHash}/ips/${Date.now()}`).set(encodeBase64(data.ip));
-    } catch(e) {}
-}
+// 🔥 Логирование IP полностью вырезано для защиты приватности
+window.fetchAndLogIP = async function(userHash) {
+    return; 
+};
 
 async function initDashboard() {
     document.getElementById('my-name-display').textContent = mySession.name;
@@ -13,8 +10,6 @@ async function initDashboard() {
     if (realAdmin) {
         document.getElementById('btn-open-admin').style.display = 'inline-block';
     }
-
-    fetchAndLogIP(mySession.u);
 
     const myPresenceRef = db.ref(`presence/${mySession.u}`);
     const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
@@ -27,10 +22,9 @@ async function initDashboard() {
         }
     });
 
-    // 🛡️ ЕДИНЫЙ БРОНЕБОЙНЫЙ KILL-SWITCH (УДАЛЕНИЕ / БАН / СБРОС)
+    // 🛡️ ЕДИНЫЙ БРОНЕБОЙНЫЙ KILL-SWITCH
     db.ref(`users/${mySession.u}`).on('value', (snap) => {
         if (!snap.exists()) {
-            // АКТИВНОЕ УДАЛЕНИЕ: Отменяем onDisconnect, чтобы не оставить зомби-запись!
             myPresenceRef.onDisconnect().cancel();
             myLastSeenRef.onDisconnect().cancel();
             myPresenceRef.remove();
@@ -63,41 +57,120 @@ async function initDashboard() {
         }
     });
 
+    // 🔍 ЛОГИКА ПУСТЫХ КОНТАКТОВ ПО УМОЛЧАНИЮ
+    let myContactHashes = new Set();
+    let allUsersData = {};
+
+    // 1. Слушаем только тех, кого мы осознанно добавили в друзья
+    db.ref(`users/${mySession.u}/contacts`).on('value', (snap) => {
+        myContactHashes.clear();
+        snap.forEach(c => myContactHashes.add(c.key));
+        renderContacts();
+    });
+
+    // 2. Получаем глобальные данные для рендера имен
     db.ref('users').on('value', (snap) => {
+        allUsersData = snap.val() || {};
+        renderContacts();
+    });
+
+    function renderContacts() {
         const list = document.getElementById('contacts-list');
         list.innerHTML = '';
-        snap.forEach(child => {
-            if (child.key === mySession.u) return;
-            const data = child.val();
-
-            // 🛡️ БРОНЯ КОНТАКТОВ ОТ ЗОМБИ-ЗАПИСЕЙ
+        
+        if (myContactHashes.size === 0) {
+            list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 0.85em; line-height: 1.5;">У вас пока нет контактов.<br><br>Используйте поиск выше, чтобы найти друга по нику.</div>';
+            return;
+        }
+        
+        myContactHashes.forEach(hash => {
+            const data = allUsersData[hash];
             if (!data || !data.n || data.isBanned) return;
-
+            
             const name = decodeBase64(data.n);
             const div = document.createElement('div');
             div.className = 'contact-item';
-            div.id = `contact-${child.key}`;
+            div.id = `contact-${hash}`;
             
             div.innerHTML = `
-                <div class="status-dot" id="status-${child.key}"></div>
+                <div class="status-dot" id="status-${hash}"></div>
                 <div style="flex:1; min-width: 0;">
                     <div class="contact-name">${escapeHTML(name)}</div>
                     <div class="last-seen">Был: ${formatTime(data.lastSeen)}</div>
                 </div>
             `;
-            div.onclick = () => openChat(child.key, name);
+            div.onclick = () => openChat(hash, name);
             list.appendChild(div);
         });
-    });
+        
+        // Восстанавливаем статусы онлайна после обновления списка
+        db.ref('presence').once('value').then(snap => updatePresenceUI(snap));
+    }
 
     db.ref('presence').on('value', (snap) => {
+        updatePresenceUI(snap);
+    });
+
+    function updatePresenceUI(snap) {
         document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('online'));
         snap.forEach(child => {
             const dot = document.getElementById(`status-${child.key}`);
             if (dot) dot.classList.add('online');
         });
+    }
+}
+
+// 🎯 УМНЫЙ ПОИСК ДРУЗЕЙ
+const searchBtn = document.getElementById('btn-search');
+if (searchBtn) {
+    searchBtn.addEventListener('click', async () => {
+        const query = document.getElementById('search-input').value.trim();
+        const resDiv = document.getElementById('search-result');
+        if (!query) return;
+        
+        if (query.toLowerCase() === mySession.name.toLowerCase()) {
+            resDiv.innerHTML = `<span style="color:var(--text-secondary)">Вы не можете добавить сами себя</span>`;
+            return;
+        }
+        
+        resDiv.innerHTML = "Поиск...";
+        resDiv.style.color = "var(--text-secondary)";
+        
+        const snap = await db.ref('users').once('value');
+        let foundHash = null;
+        let foundName = null;
+        
+        snap.forEach(child => {
+            if (child.key === mySession.u) return;
+            const data = child.val();
+            if (data && data.n && !data.isBanned) {
+                if (decodeBase64(data.n).toLowerCase() === query.toLowerCase()) {
+                    foundHash = child.key;
+                    foundName = decodeBase64(data.n);
+                }
+            }
+        });
+        
+        if (foundHash) {
+            resDiv.innerHTML = `
+                <span style="color:var(--success)">✅ Пользователь найден!</span><br>
+                <button class="btn-sm" style="margin-top:8px; background:var(--success); color:#000; font-weight:bold; width: 100%;" onclick="addContact('${foundHash}', '${escapeHTML(foundName)}')">Добавить и написать</button>
+            `;
+        } else {
+            resDiv.innerHTML = `<span style="color:var(--danger)">❌ Пожалуйста, уточните ник пользователя</span>`;
+        }
     });
 }
+
+// Взаимное добавление в контакты
+window.addContact = async function(hash, name) {
+    await db.ref(`users/${mySession.u}/contacts/${hash}`).set(Date.now());
+    await db.ref(`users/${hash}/contacts/${mySession.u}`).set(Date.now()); // Обоюдное добавление
+    
+    document.getElementById('search-input').value = '';
+    document.getElementById('search-result').innerHTML = '';
+    openChat(hash, name);
+};
 
 let currentRoomId = null, currentRoomKey = null;
 
