@@ -17,7 +17,7 @@ function showView(viewName) {
     } else {
         document.body.classList.remove('app-theme');
     }
-    document.title = viewName === '404' ? "404 Not Found" : "Ghost Core";
+    document.title = viewName === '404' ? "404 Not Found" : "ghost";
     
     const target = views[viewName];
     if (viewName === 'app' || viewName === 'invite') target.classList.add('active-flex');
