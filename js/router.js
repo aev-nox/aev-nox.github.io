@@ -17,7 +17,7 @@ function showView(viewName) {
     } else {
         document.body.classList.remove('app-theme');
     }
-    document.title = viewName === '404' ? "404 Not Found" : "ghost";
+    document.title = viewName === '404' ? "404 Not Found" : "Ghost Core";
     
     const target = views[viewName];
     if (viewName === 'app' || viewName === 'invite') target.classList.add('active-flex');
@@ -30,11 +30,15 @@ function setupAuthUI(isLogin, username = "") {
     const userInput = document.getElementById('reg-username');
     const btn = document.getElementById('btn-register');
     const warningBox = document.getElementById('auth-warning');
+    const passConfirm = document.getElementById('reg-password-confirm');
+    const checkboxContainer = document.getElementById('auth-checkbox-container');
 
     if (isLogin) {
         if (title) title.textContent = "Вход в систему";
         if (subtitle) subtitle.textContent = `Персональный канал: ${username}`;
         if (warningBox) warningBox.style.display = "none";
+        if (passConfirm) passConfirm.style.display = "none";
+        if (checkboxContainer) checkboxContainer.style.display = "none";
         userInput.value = username;
         userInput.disabled = true;
         btn.textContent = "Войти в аккаунт";
@@ -42,6 +46,8 @@ function setupAuthUI(isLogin, username = "") {
         if (title) title.textContent = "Активация доступа";
         if (subtitle) subtitle.textContent = username ? "Регистрация Администратора" : "Первичная регистрация";
         if (warningBox) warningBox.style.display = "block";
+        if (passConfirm) passConfirm.style.display = "block";
+        if (checkboxContainer) checkboxContainer.style.display = "flex";
         userInput.value = "";
         userInput.disabled = false;
         btn.textContent = "Зарегистрироваться и войти";
@@ -152,6 +158,7 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     const userHash = await sha256(user);
     const passHash = await sha256(userHash + ":" + pass); // Соль отвязана от никнейма
 
+    // ЛОГИКА ДЛЯ УЖЕ ЗАРЕГИСТРИРОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ВХОД ИЛИ СБРОС)
     if (currentInviteData && currentInviteData.userHash) {
         const targetUserHash = currentInviteData.userHash;
         const targetPassHash = await sha256(targetUserHash + ":" + pass);
@@ -194,11 +201,29 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
     } 
+    // ЛОГИКА ДЛЯ ПЕРВИЧНОЙ РЕГИСТРАЦИИ (НОВЫЙ АККАУНТ)
     else {
         const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
         if (!currentInviteData && !isPendingAdmin) {
             return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта.");
         }
+
+        // --- НАШИ НОВЫЕ ЖЕСТКИЕ ПРОВЕРКИ ---
+        const passConfirm = document.getElementById('reg-password-confirm').value.trim();
+        const isChecked = document.getElementById('reg-checkbox').checked;
+
+        if (pass !== passConfirm) {
+            return alert("❌ Пароли не совпадают! Пожалуйста, введите одинаковые пароли.");
+        }
+        if (!isChecked) {
+            return alert("❌ Пожалуйста, подтвердите, что вы сохранили данные (поставьте галочку).");
+        }
+
+        const userSnapCheck = await db.ref(`users/${userHash}`).once('value');
+        if (userSnapCheck.exists()) {
+            return alert("❌ Этот логин уже занят! Пожалуйста, придумайте другой.");
+        }
+        // -----------------------------------
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
