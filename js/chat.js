@@ -286,8 +286,12 @@ async function openChat(peerHash, peerName) {
         
         msgsContainer.appendChild(div);
         
-        // 🔥 НАДЕЖНЫЙ МГНОВЕННЫЙ СКРОЛЛ (Без лагов)
-        msgsContainer.scrollTop = msgsContainer.scrollHeight;
+        // 🔥 МАКСИМАЛЬНАЯ НАДЕЖНОСТЬ: Выполняем скролл "пачкой" (Debounce)
+        // Если пришло 100 сообщений разом, скролл сработает только 1 раз в конце.
+        clearTimeout(window.chatScrollTimeout);
+        window.chatScrollTimeout = setTimeout(() => {
+            msgsContainer.scrollTop = msgsContainer.scrollHeight;
+        }, 50);
     });
 
     db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
