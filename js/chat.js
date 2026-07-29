@@ -53,7 +53,6 @@ async function initDashboard() {
     let myContactHashes = new Set();
     let allUsersData = {};
 
-    // 🔥 ИСПРАВЛЕНИЕ: Цикл больше не обрывается на первом элементе!
     db.ref(`users/${mySession.u}/contacts`).on('value', (snap) => {
         myContactHashes.clear();
         snap.forEach(c => {
@@ -130,7 +129,6 @@ if (searchBtn) {
         let foundHash = null;
         let foundName = null;
         
-        // 🔥 ИСПРАВЛЕНИЕ: Добавлены фигурные скобки, чтобы поиск не обрывался
         snap.forEach(child => {
             if (child.key === mySession.u) return;
             const data = child.val();
@@ -287,7 +285,9 @@ async function openChat(peerHash, peerName) {
         `;
         
         msgsContainer.appendChild(div);
-        msgsContainer.scrollTop = msgsContainer.scrollHeight;
+        
+        // 🔥 ИСПРАВЛЕНИЕ: Плавная прокрутка вниз при новом сообщении
+        msgsContainer.scrollTo({ top: msgsContainer.scrollHeight, behavior: 'smooth' });
     });
 
     db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
@@ -325,7 +325,15 @@ document.getElementById('btn-clear-chat').addEventListener('click', async () => 
     }
 });
 
+// 🔥 ИСПРАВЛЕНИЕ: Умное поле ввода (Auto-resize)
 const msgInput = document.getElementById('msg-input');
+
+msgInput.addEventListener('input', function() {
+    this.style.height = 'auto'; // Сбрасываем высоту для пересчета
+    this.style.height = (this.scrollHeight) + 'px'; // Устанавливаем по размеру контента
+    if (this.value === '') this.style.height = 'auto'; // Сброс при пустом поле
+});
+
 msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -336,7 +344,9 @@ msgInput.addEventListener('keydown', (e) => {
 document.getElementById('btn-send').addEventListener('click', async () => {
     const text = msgInput.value.trim();
     if (!text || !currentRoomId || !currentRoomKey) return;
+    
     msgInput.value = '';
+    msgInput.style.height = 'auto'; // Сбрасываем высоту поля после отправки
 
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12));
