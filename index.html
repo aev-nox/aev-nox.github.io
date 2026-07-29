@@ -138,6 +138,28 @@
         </div>
     </div>
 
+    <div id="modal-delete-contact" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h3 style="margin-top: 0; color: #f87171; font-size: 1.2em;">Удаление чата</h3>
+            <p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">Вы собираетесь удалить этот чат. Выберите действия, которые необходимо выполнить:</p>
+            
+            <label class="custom-checkbox">
+                <input type="checkbox" id="cb-delete-contact" checked>
+                <span>Удалить пользователя из списка контактов</span>
+            </label>
+            
+            <label class="custom-checkbox">
+                <input type="checkbox" id="cb-clear-chat" checked>
+                <span style="color: #fca5a5;">Безвозвратно очистить переписку у обоих участников</span>
+            </label>
+            
+            <div style="display: flex; gap: 10px; margin-top: 25px; justify-content: flex-end;">
+                <button id="btn-cancel-delete" class="btn-sm" style="background: var(--bg-hover); padding: 8px 16px;">Отмена</button>
+                <button id="btn-confirm-delete" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px; font-weight: bold;">Выполнить</button>
+            </div>
+        </div>
+    </div>
+
     <script src="js/crypto.js"></script>
     <script src="js/config.js"></script>
     <script src="js/router.js"></script>
