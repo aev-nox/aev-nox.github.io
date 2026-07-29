@@ -53,9 +53,12 @@ async function initDashboard() {
     let myContactHashes = new Set();
     let allUsersData = {};
 
+    // 🔥 ИСПРАВЛЕНИЕ: Цикл больше не обрывается на первом элементе!
     db.ref(`users/${mySession.u}/contacts`).on('value', (snap) => {
         myContactHashes.clear();
-        snap.forEach(c => myContactHashes.add(c.key));
+        snap.forEach(c => {
+            myContactHashes.add(c.key);
+        });
         renderContacts();
     });
 
@@ -127,6 +130,7 @@ if (searchBtn) {
         let foundHash = null;
         let foundName = null;
         
+        // 🔥 ИСПРАВЛЕНИЕ: Добавлены фигурные скобки, чтобы поиск не обрывался
         snap.forEach(child => {
             if (child.key === mySession.u) return;
             const data = child.val();
@@ -158,7 +162,6 @@ window.addContact = async function(hash, name) {
     openChat(hash, name);
 };
 
-// 🔥 НОВАЯ ФУНКЦИЯ УДАЛЕНИЯ КОНТАКТА
 window.deleteContact = async function(peerHash) {
     if (confirm("Удалить пользователя из списка контактов?")) {
         const clearChat = confirm("Очистить историю переписки у обоих участников? (Да/Нет)");
@@ -173,7 +176,6 @@ window.deleteContact = async function(peerHash) {
             await db.ref(`rooms/${targetRoomId}`).remove();
         }
         
-        // Если мы удаляем контакт, с которым прямо сейчас открыт чат - закрываем его
         if (currentRoomId === targetRoomId) {
             document.querySelector('.dashboard').classList.remove('mobile-chat-active');
             db.ref(`rooms/${currentRoomId}/messages`).off();
@@ -192,7 +194,6 @@ window.deleteContact = async function(peerHash) {
 let currentRoomId = null, currentRoomKey = null;
 
 async function openChat(peerHash, peerName) {
-    // ДЛЯ ТЕЛЕФОНОВ: Показываем чат, прячем контакты
     document.querySelector('.dashboard').classList.add('mobile-chat-active');
 
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
@@ -207,7 +208,6 @@ async function openChat(peerHash, peerName) {
     document.getElementById('crypto-badge').style.display = 'none';
     document.getElementById('chat-controls').style.display = 'none';
 
-    // 🔥 ИСПРАВЛЕНИЕ БАГА: ЖЕСТКО ОТКЛЮЧАЕМСЯ ОТ СТАРОЙ КОМНАТЫ
     if (currentRoomId) {
         db.ref(`rooms/${currentRoomId}/messages`).off();
         db.ref(`rooms/${currentRoomId}/ttl`).off();
@@ -295,7 +295,6 @@ async function openChat(peerHash, peerName) {
     });
 }
 
-// КНОПКА "НАЗАД" ДЛЯ МОБИЛОК
 const backBtn = document.getElementById('btn-mobile-back');
 if (backBtn) {
     backBtn.addEventListener('click', () => {
