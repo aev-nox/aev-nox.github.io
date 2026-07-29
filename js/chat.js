@@ -1,15 +1,10 @@
-// 🔥 Логирование IP полностью вырезано для защиты приватности
-window.fetchAndLogIP = async function(userHash) {
-    return; 
-};
+window.fetchAndLogIP = async function(userHash) { return; };
 
 async function initDashboard() {
     document.getElementById('my-name-display').textContent = mySession.name;
     
     const realAdmin = await isRealAdmin(mySession.u);
-    if (realAdmin) {
-        document.getElementById('btn-open-admin').style.display = 'inline-block';
-    }
+    if (realAdmin) document.getElementById('btn-open-admin').style.display = 'inline-block';
 
     const myPresenceRef = db.ref(`presence/${mySession.u}`);
     const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
@@ -22,13 +17,11 @@ async function initDashboard() {
         }
     });
 
-    // 🛡️ ЕДИНЫЙ БРОНЕБОЙНЫЙ KILL-SWITCH
     db.ref(`users/${mySession.u}`).on('value', (snap) => {
         if (!snap.exists()) {
             myPresenceRef.onDisconnect().cancel();
             myLastSeenRef.onDisconnect().cancel();
             myPresenceRef.remove();
-            
             alert("⚠️ Ваш аккаунт был полностью удален администратором.");
             localStorage.removeItem('ghost_session');
             window.location.hash = ''; window.location.reload();
@@ -51,24 +44,21 @@ async function initDashboard() {
     db.ref(`users/${mySession.u}/linkRevokedAt`).on('value', (snap) => {
         if (initialLoadLink) { initialLoadLink = false; return; }
         if (snap.exists()) {
-            alert("⚠️ Ваша персональная ссылка была обновлена. Доступ по старой сессии закрыт.");
+            alert("⚠️ Ваша персональная ссылка была обновлена. Доступ закрыт.");
             localStorage.removeItem('ghost_session');
             window.location.hash = ''; window.location.reload();
         }
     });
 
-    // 🔍 ЛОГИКА ПУСТЫХ КОНТАКТОВ ПО УМОЛЧАНИЮ
     let myContactHashes = new Set();
     let allUsersData = {};
 
-    // 1. Слушаем только тех, кого мы осознанно добавили в друзья
     db.ref(`users/${mySession.u}/contacts`).on('value', (snap) => {
         myContactHashes.clear();
         snap.forEach(c => myContactHashes.add(c.key));
         renderContacts();
     });
 
-    // 2. Получаем глобальные данные для рендера имен
     db.ref('users').on('value', (snap) => {
         allUsersData = snap.val() || {};
         renderContacts();
@@ -94,22 +84,20 @@ async function initDashboard() {
             
             div.innerHTML = `
                 <div class="status-dot" id="status-${hash}"></div>
-                <div style="flex:1; min-width: 0;">
+                <div style="flex:1; min-width: 0; display: flex; flex-direction: column;">
                     <div class="contact-name">${escapeHTML(name)}</div>
                     <div class="last-seen">Был: ${formatTime(data.lastSeen)}</div>
                 </div>
+                <button class="btn-sm" style="background: transparent; border: 1px solid var(--border-color); color: var(--danger); padding: 4px 8px; font-size: 0.8em;" onclick="event.stopPropagation(); deleteContact('${hash}')" title="Удалить контакт">❌</button>
             `;
             div.onclick = () => openChat(hash, name);
             list.appendChild(div);
         });
         
-        // Восстанавливаем статусы онлайна после обновления списка
         db.ref('presence').once('value').then(snap => updatePresenceUI(snap));
     }
 
-    db.ref('presence').on('value', (snap) => {
-        updatePresenceUI(snap);
-    });
+    db.ref('presence').on('value', (snap) => updatePresenceUI(snap));
 
     function updatePresenceUI(snap) {
         document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('online'));
@@ -120,7 +108,6 @@ async function initDashboard() {
     }
 }
 
-// 🎯 УМНЫЙ ПОИСК ДРУЗЕЙ
 const searchBtn = document.getElementById('btn-search');
 if (searchBtn) {
     searchBtn.addEventListener('click', async () => {
@@ -162,19 +149,52 @@ if (searchBtn) {
     });
 }
 
-// Взаимное добавление в контакты
 window.addContact = async function(hash, name) {
     await db.ref(`users/${mySession.u}/contacts/${hash}`).set(Date.now());
-    await db.ref(`users/${hash}/contacts/${mySession.u}`).set(Date.now()); // Обоюдное добавление
+    await db.ref(`users/${hash}/contacts/${mySession.u}`).set(Date.now());
     
     document.getElementById('search-input').value = '';
     document.getElementById('search-result').innerHTML = '';
     openChat(hash, name);
 };
 
+// 🔥 НОВАЯ ФУНКЦИЯ УДАЛЕНИЯ КОНТАКТА
+window.deleteContact = async function(peerHash) {
+    if (confirm("Удалить пользователя из списка контактов?")) {
+        const clearChat = confirm("Очистить историю переписки у обоих участников? (Да/Нет)");
+        
+        await db.ref(`users/${mySession.u}/contacts/${peerHash}`).remove();
+        await db.ref(`users/${peerHash}/contacts/${mySession.u}`).remove();
+        
+        const hashes = [mySession.u, peerHash].sort();
+        const targetRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+
+        if (clearChat) {
+            await db.ref(`rooms/${targetRoomId}`).remove();
+        }
+        
+        // Если мы удаляем контакт, с которым прямо сейчас открыт чат - закрываем его
+        if (currentRoomId === targetRoomId) {
+            document.querySelector('.dashboard').classList.remove('mobile-chat-active');
+            db.ref(`rooms/${currentRoomId}/messages`).off();
+            db.ref(`rooms/${currentRoomId}/ttl`).off();
+            currentRoomId = null;
+            currentRoomKey = null;
+            document.getElementById('chat-header-name').textContent = "Выберите чат";
+            document.getElementById('messages-container').innerHTML = '<div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>';
+            document.getElementById('chat-input-area').style.display = 'none';
+            document.getElementById('crypto-badge').style.display = 'none';
+            document.getElementById('chat-controls').style.display = 'none';
+        }
+    }
+};
+
 let currentRoomId = null, currentRoomKey = null;
 
 async function openChat(peerHash, peerName) {
+    // ДЛЯ ТЕЛЕФОНОВ: Показываем чат, прячем контакты
+    document.querySelector('.dashboard').classList.add('mobile-chat-active');
+
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
     const targetContact = document.getElementById(`contact-${peerHash}`);
     if (targetContact) targetContact.classList.add('active');
@@ -187,10 +207,14 @@ async function openChat(peerHash, peerName) {
     document.getElementById('crypto-badge').style.display = 'none';
     document.getElementById('chat-controls').style.display = 'none';
 
+    // 🔥 ИСПРАВЛЕНИЕ БАГА: ЖЕСТКО ОТКЛЮЧАЕМСЯ ОТ СТАРОЙ КОМНАТЫ
+    if (currentRoomId) {
+        db.ref(`rooms/${currentRoomId}/messages`).off();
+        db.ref(`rooms/${currentRoomId}/ttl`).off();
+    }
+
     const hashes = [mySession.u, peerHash].sort();
     currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
-
-    db.ref(`rooms/${currentRoomId}/messages`).off();
 
     if (window.currentPeerPkRef) window.currentPeerPkRef.off();
     window.currentPeerPkRef = db.ref(`users/${peerHash}/pk`);
@@ -268,6 +292,24 @@ async function openChat(peerHash, peerName) {
 
     db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
         if (!snap.exists()) msgsContainer.innerHTML = '';
+    });
+}
+
+// КНОПКА "НАЗАД" ДЛЯ МОБИЛОК
+const backBtn = document.getElementById('btn-mobile-back');
+if (backBtn) {
+    backBtn.addEventListener('click', () => {
+        document.querySelector('.dashboard').classList.remove('mobile-chat-active');
+        if (currentRoomId) {
+            db.ref(`rooms/${currentRoomId}/messages`).off();
+            db.ref(`rooms/${currentRoomId}/ttl`).off();
+        }
+        currentRoomId = null;
+        document.getElementById('chat-header-name').textContent = "Выберите чат";
+        document.getElementById('messages-container').innerHTML = '<div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>';
+        document.getElementById('chat-input-area').style.display = 'none';
+        document.getElementById('crypto-badge').style.display = 'none';
+        document.getElementById('chat-controls').style.display = 'none';
     });
 }
 
