@@ -61,6 +61,15 @@
                         </div>
                     </div>
                 </div>
+                
+                <div class="sidebar-search" style="padding: 12px 15px; background: var(--bg-surface); border-bottom: 1px solid var(--border-color);">
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="search-input" placeholder="Ник друга..." style="flex: 1; background: var(--bg-main); border: 1px solid var(--border-color); color: #fff; padding: 8px 12px; border-radius: 6px; outline: none; font-size: 0.85em;">
+                        <button id="btn-search" class="btn-sm" style="background: var(--accent);">🔍</button>
+                    </div>
+                    <div id="search-result" style="margin-top: 8px; font-size: 0.8em; text-align: center;"></div>
+                </div>
+
                 <div class="contacts-list" id="contacts-list"></div>
             </div>
             <div class="chat-area">
@@ -104,7 +113,6 @@
                         <th>Пользователь</th>
                         <th>Статус</th>
                         <th>Последний вход</th>
-                        <th>Лог IP</th>
                         <th>Управление</th>
                     </tr>
                 </thead>
