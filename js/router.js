@@ -8,6 +8,20 @@ const views = {
 let currentInviteHash = null;
 let currentInviteData = null;
 let mySession = JSON.parse(localStorage.getItem('ghost_session')) || null;
+let isFirebaseReady = false; // Флаг готовности авторизации
+
+// 🔥 Скрытая анонимная авторизация перед любыми действиями
+auth.signInAnonymously()
+    .then(() => {
+        isFirebaseReady = true;
+        console.log("Secure Session Established: ", auth.currentUser.uid);
+        handleRoute(); // Запускаем роутер только после того, как получили токен
+    })
+    .catch((error) => {
+        console.error("Auth Error:", error);
+        alert("Ошибка установки защищенного соединения с базой. Проверьте настройки Firebase.");
+    });
+
 
 function showView(viewName) {
     Object.values(views).forEach(el => el.classList.remove('active', 'active-flex'));
@@ -83,6 +97,8 @@ async function decryptPrivateKey(userHash, password, encryptedB64) {
 }
 
 async function handleRoute() {
+    if (!isFirebaseReady) return; // Ждем токен перед маршрутизацией
+
     const hash = window.location.hash;
 
     if (hash.startsWith('#/root-key/')) {
@@ -148,17 +164,19 @@ async function handleRoute() {
     else showView('404');
 }
 
-window.addEventListener('hashchange', handleRoute);
+window.addEventListener('hashchange', () => { if (isFirebaseReady) handleRoute(); });
 
 document.getElementById('btn-register').addEventListener('click', async () => {
+    if (!isFirebaseReady || !auth.currentUser) return alert("Ожидание защищенного соединения...");
+
     const user = document.getElementById('reg-username').value.trim();
     const pass = document.getElementById('reg-password').value.trim();
     if (user.length < 2 || pass.length < 4) return alert("Логин от 2 символов, пароль от 4 символов!");
 
     const userHash = await sha256(user);
-    const passHash = await sha256(userHash + ":" + pass); // Соль отвязана от никнейма
+    const passHash = await sha256(userHash + ":" + pass); 
 
-    // ЛОГИКА ДЛЯ УЖЕ ЗАРЕГИСТРИРОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ВХОД ИЛИ СБРОС)
+    // ЛОГИКА ВХОДА (УЖЕ ЗАРЕГИСТРИРОВАН)
     if (currentInviteData && currentInviteData.userHash) {
         const targetUserHash = currentInviteData.userHash;
         const targetPassHash = await sha256(targetUserHash + ":" + pass);
@@ -175,7 +193,13 @@ document.getElementById('btn-register').addEventListener('click', async () => {
             const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
             const encryptedPrivKey = await encryptPrivateKey(targetUserHash, pass, privJwk);
 
-            await db.ref(`users/${targetUserHash}`).update({ pk: pubJwk, epk: encryptedPrivKey, ph: targetPassHash });
+            // 🔥 Сохраняем owner_uid при сбросе ключей
+            await db.ref(`users/${targetUserHash}`).update({ 
+                pk: pubJwk, 
+                epk: encryptedPrivKey, 
+                ph: targetPassHash,
+                owner_uid: auth.currentUser.uid 
+            });
             alert("🔑 Новый пароль установлен. Ключи перегенерированы.");
             
             const isAdmin = await isRealAdmin(targetUserHash);
@@ -194,6 +218,9 @@ document.getElementById('btn-register').addEventListener('click', async () => {
             return alert("❌ Ошибка дешифровки ключей. Проверьте пароль.");
         }
 
+        // 🔥 Обновляем привязку устройства к аккаунту при входе
+        await db.ref(`users/${targetUserHash}/owner_uid`).set(auth.currentUser.uid);
+
         const isAdmin = await isRealAdmin(targetUserHash);
         mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
@@ -201,29 +228,21 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
     } 
-    // ЛОГИКА ДЛЯ ПЕРВИЧНОЙ РЕГИСТРАЦИИ (НОВЫЙ АККАУНТ)
+    // ЛОГИКА ПЕРВИЧНОЙ РЕГИСТРАЦИИ
     else {
         const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
         if (!currentInviteData && !isPendingAdmin) {
             return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта.");
         }
 
-        // --- НАШИ НОВЫЕ ЖЕСТКИЕ ПРОВЕРКИ ---
         const passConfirm = document.getElementById('reg-password-confirm').value.trim();
         const isChecked = document.getElementById('reg-checkbox').checked;
 
-        if (pass !== passConfirm) {
-            return alert("❌ Пароли не совпадают! Пожалуйста, введите одинаковые пароли.");
-        }
-        if (!isChecked) {
-            return alert("❌ Пожалуйста, подтвердите, что вы сохранили данные (поставьте галочку).");
-        }
+        if (pass !== passConfirm) return alert("❌ Пароли не совпадают! Пожалуйста, введите одинаковые пароли.");
+        if (!isChecked) return alert("❌ Пожалуйста, подтвердите, что вы сохранили данные (поставьте галочку).");
 
         const userSnapCheck = await db.ref(`users/${userHash}`).once('value');
-        if (userSnapCheck.exists()) {
-            return alert("❌ Этот логин уже занят! Пожалуйста, придумайте другой.");
-        }
-        // -----------------------------------
+        if (userSnapCheck.exists()) return alert("❌ Этот логин уже занят! Пожалуйста, придумайте другой.");
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
@@ -231,17 +250,18 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
         const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
 
-        await db.ref(`users/${userHash}`).update({
+        // 🔥 Пишем owner_uid при регистрации
+        await db.ref(`users/${userHash}`).set({
             n: encodeBase64(user),
             pk: pubJwk,
             epk: encryptedPrivKey,
             ph: passHash,
             created: Date.now(),
-            isBanned: false
+            isBanned: false,
+            owner_uid: auth.currentUser.uid
         });
 
         if (isPendingAdmin) await db.ref(`admins/${userHash}`).set(true);
-        await fetchAndLogIP(userHash);
 
         if (currentInviteHash) {
             await db.ref(`invites/${currentInviteHash}`).update({
@@ -262,6 +282,9 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 document.getElementById('btn-logout').onclick = () => {
     if (mySession) db.ref(`presence/${mySession.u}`).remove();
     localStorage.removeItem('ghost_session');
-    window.location.hash = ''; 
-    window.location.reload();
+    // При выходе разрываем защищенное соединение
+    auth.signOut().then(() => {
+        window.location.hash = ''; 
+        window.location.reload();
+    });
 };
