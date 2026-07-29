@@ -75,16 +75,17 @@
             <div class="chat-area">
                 <div class="chat-header">
                     <div style="display:flex; align-items:center; gap:10px;">
+                        <button id="btn-mobile-back" class="btn-sm" style="display:none; background: var(--bg-hover); font-size: 1.2em; padding: 4px 10px;">⬅</button>
                         <span id="chat-header-name">Выберите чат</span>
                         <span id="crypto-badge" style="display:none;">🔒 ECDH E2EE</span>
                     </div>
                     <div id="chat-controls" style="display:none; align-items:center; gap:10px;">
                         <select id="auto-clean-select" class="btn-sm" style="background:var(--bg-main); border:1px solid var(--border-color); color:var(--text-secondary); outline:none;">
-                            <option value="0">⏱️ Автоочистка: Выкл</option>
-                            <option value="3600000">⏱️ Автоочистка: 1 час</option>
-                            <option value="86400000">⏱️ Автоочистка: 24 часа</option>
+                            <option value="0">⏱️ Выкл</option>
+                            <option value="3600000">⏱️ 1 час</option>
+                            <option value="86400000">⏱️ 24 часа</option>
                         </select>
-                        <button class="btn-sm" id="btn-clear-chat" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">🗑️ Очистить</button>
+                        <button class="btn-sm" id="btn-clear-chat" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">🗑️</button>
                     </div>
                 </div>
                 <div class="messages" id="messages-container">
@@ -94,7 +95,7 @@
                     </div>
                 </div>
                 <div class="chat-input-container" id="chat-input-area" style="display: none;">
-                    <textarea id="msg-input" placeholder="Введите сообщение... (Shift+Enter для переноса)" rows="1"></textarea>
+                    <textarea id="msg-input" placeholder="Введите сообщение..." rows="1"></textarea>
                     <button id="btn-send">➤</button>
                 </div>
             </div>
