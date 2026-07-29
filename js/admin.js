@@ -2,13 +2,20 @@ document.getElementById('btn-open-admin').onclick = () => window.location.hash =
 document.getElementById('btn-close-admin').onclick = () => window.location.hash = '#/app';
 
 let onlineUsers = new Set();
+// 🔥 ИСПРАВЛЕНИЕ: Добавлены фигурные скобки, чтобы не обрывать чтение онлайна
 db.ref('presence').on('value', snap => {
     onlineUsers.clear();
-    snap.forEach(c => onlineUsers.add(c.key));
+    snap.forEach(c => {
+        onlineUsers.add(c.key);
+    });
+    // Если админка открыта, перерисовываем статусы
+    if (window.location.hash === '#/admin') {
+        initAdminPanel();
+    }
 });
 
 function initAdminPanel() {
-    db.ref('users').on('value', snap => {
+    db.ref('users').once('value', snap => {
         const tbody = document.getElementById('admin-users-list');
         tbody.innerHTML = '';
         
@@ -53,6 +60,7 @@ function escapeHTML(str) {
 window.toggleBan = async function(userHash, state) {
     if(confirm(state ? "Заблокировать пользователя?" : "Разблокировать пользователя?")) {
         await db.ref(`users/${userHash}/isBanned`).set(state);
+        initAdminPanel();
     }
 };
 
@@ -60,6 +68,7 @@ window.editUser = async function(userHash, currentName) {
     const newName = prompt("Введите новое имя:", currentName);
     if (newName && newName.trim().length >= 2) {
         await db.ref(`users/${userHash}/n`).set(encodeBase64(newName.trim()));
+        initAdminPanel();
     }
 };
 
@@ -84,6 +93,8 @@ window.deleteUserCompletely = async function(userHash) {
     invitesSnap.forEach(child => {
         if (child.val().userHash === userHash) db.ref(`invites/${child.key}`).remove();
     });
+    
+    initAdminPanel();
 };
 
 window.regenerateUserLink = async function(userHash) {
