@@ -16,8 +16,6 @@ function initAdminPanel() {
             const data = child.val();
             const hash = child.key;
 
-            // 🛡️ БРОНЯ ОТ ЗОМБИ-ЗАПИСЕЙ (ФАНТОМОВ)
-            // Если узел поврежден или не имеет имени, удаляем этот мусор и пропускаем
             if (!data || !data.n) {
                 db.ref(`users/${hash}`).remove();
                 return;
@@ -26,18 +24,11 @@ function initAdminPanel() {
             const name = decodeBase64(data.n);
             const isOnline = onlineUsers.has(hash);
             
-            let ipsHtml = '';
-            if (data.ips) {
-                const sorted = Object.entries(data.ips).sort((a,b) => b[0] - a[0]).slice(0, 3);
-                ipsHtml = sorted.map(([ts, ipB64]) => `${decodeBase64(ipB64)} <span style="color:#94a3b8;font-size:0.75em">(${formatTime(Number(ts))})</span>`).join('<br>');
-            } else ipsHtml = 'Нет данных';
-
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><strong>${escapeHTML(name)}</strong><br><span style="font-size:0.7em;color:#94a3b8;">${hash.substring(0,8)}...</span></td>
                 <td>${data.isBanned ? '⛔ Забанен' : (isOnline ? '🟢 Онлайн' : '⚪ Оффлайн')}</td>
                 <td>${formatTime(data.lastSeen)}</td>
-                <td style="font-family:monospace; font-size:0.85em;">${ipsHtml}</td>
                 <td class="action-btns">
                     ${data.isBanned 
                         ? `<button class="btn-unban" onclick="toggleBan('${hash}', false)">Разбанить</button>` 
