@@ -46,12 +46,12 @@ function setupAuthUI(isLogin, username = "") {
 
     if (isLogin) {
         if (title) title.textContent = "Вход в систему";
-        if (subtitle) subtitle.textContent = username ? `Персональный канал: ${username}` : "Введите ваши данные для входа";
+        if (subtitle) subtitle.textContent = `Персональный канал: ${username}`;
         if (warningBox) warningBox.style.display = "none";
         if (passConfirm) passConfirm.style.display = "none";
         if (checkboxContainer) checkboxContainer.style.display = "none";
         userInput.value = username;
-        userInput.disabled = (username !== ""); // Разрешаем ввод логина, если зашли без инвайта
+        userInput.disabled = true; // Запрещаем менять ник при входе по личной ссылке
         btn.textContent = "Войти в аккаунт";
     } else {
         if (title) title.textContent = "Активация доступа";
@@ -98,46 +98,30 @@ async function handleRoute() {
 
     const hash = window.location.hash;
 
-    // 🔥 Прямой вход (без инвайта)
-    if (hash === '' || hash === '#/' || hash === '#/login') {
-        if (mySession) {
-            window.location.hash = mySession.isAdmin ? '#/admin' : '#/app';
-            return;
-        }
-        setupAuthUI(true, ""); // Открываем форму ВХОДА
-        showView('invite');
-        return;
-    }
-
+    // 🔥 1. МАСТЕР-ССЫЛКА АДМИНА
     if (hash.startsWith('#/root-key/')) {
         const token = hash.replace('#/root-key/', '');
         const tokenHash = await sha256(token);
         const masterSnap = await db.ref('admin_master_hash').once('value');
         
         if (masterSnap.exists() && masterSnap.val() === tokenHash) {
-            if (mySession) {
-                await db.ref(`admin_uids/${auth.currentUser.uid}`).set(tokenHash);
-                await db.ref(`admins/${mySession.u}`).set(true);
-                mySession.isAdmin = true;
-                localStorage.setItem('ghost_session', JSON.stringify(mySession));
-                window.location.hash = '#/admin';
-            } else {
-                sessionStorage.setItem('pending_admin', 'true');
-                sessionStorage.setItem('pending_admin_token', tokenHash); 
-                setupAuthUI(true, ""); // Удобный интерфейс: можно войти в старого админа или зарегать нового
-                document.getElementById('auth-title').textContent = "Вход Администратора";
-                showView('invite');
+            if (mySession && mySession.isAdmin) {
+                showView('admin');
+                initAdminPanel();
+                return;
             }
+            sessionStorage.setItem('pending_admin', 'true');
+            sessionStorage.setItem('pending_admin_token', tokenHash); 
+            setupAuthUI(false, "Администратор");
+            showView('invite');
             return;
         } else {
-            showView('404'); return;
+            showView('404'); 
+            return;
         }
     }
 
-    if (mySession && hash !== '#/app' && hash !== '#/admin') { 
-        window.location.hash = '#/app'; return; 
-    }
-
+    // 🔥 2. ИНВАЙТ-ССЫЛКА ПОЛЬЗОВАТЕЛЯ
     if (hash.startsWith('#/inv/')) {
         const token = hash.replace('#/inv/', '');
         currentInviteHash = await sha256(token);
@@ -145,6 +129,8 @@ async function handleRoute() {
         
         if (snap.exists()) {
             currentInviteData = snap.val();
+            
+            // Ссылка уже привязана к пользователю -> ВХОД
             if (currentInviteData.userHash) {
                 const userSnap = await db.ref(`users/${currentInviteData.userHash}`).once('value');
                 if (userSnap.exists()) {
@@ -153,26 +139,37 @@ async function handleRoute() {
                 } else {
                     showView('404');
                 }
-            } else {
+            } 
+            // Ссылка новая -> РЕГИСТРАЦИЯ
+            else {
                 setupAuthUI(false, "");
                 showView('invite');
             }
+            return;
         } else {
             showView('404');
+            return;
         }
     } 
-    else if (hash === '#/app') {
-        if (mySession) { showView('app'); initDashboard(); } else window.location.hash = '#/login';
+
+    // 🔥 3. ВНУТРЕННИЕ СТРАНИЦЫ (Доступны только при активной сессии)
+    if (hash === '#/app') {
+        if (mySession) { showView('app'); initDashboard(); } else showView('404');
+        return;
     }
-    else if (hash === '#/admin') {
+    
+    if (hash === '#/admin') {
         const hasAdminRights = mySession && await isRealAdmin(mySession.u);
         if (hasAdminRights) {
             showView('admin'); initAdminPanel(); 
         } else {
-            window.location.hash = '#/app';
+            showView('404');
         }
+        return;
     }
-    else showView('404');
+
+    // 🔥 4. ВСЕ ОСТАЛЬНОЕ И ПУСТОЙ ХЭШ -> 404 NOT FOUND
+    showView('404');
 }
 
 window.addEventListener('hashchange', () => { if (isFirebaseReady) handleRoute(); });
@@ -187,36 +184,20 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     const userHash = await sha256(user);
     const passHash = await sha256(userHash + ":" + pass); 
 
+    const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
+    const pendingToken = sessionStorage.getItem('pending_admin_token');
+
     // Проверяем, существует ли пользователь в базе
     const userSnapCheck = await db.ref(`users/${userHash}`).once('value');
 
     if (userSnapCheck.exists()) {
-        // ================= ЛОГИКА ВХОДА =================
+        // ================= ЛОГИКА ВХОДА (Уже зарегистрирован) =================
         const userData = userSnapCheck.val();
         if (userData.isBanned) return alert("⛔ Аккаунт заблокирован!");
 
-        if (!userData.ph) {
-            const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
-            const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
-            const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
-            const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
-
-            await db.ref(`users/${userHash}`).update({ 
-                pk: pubJwk, 
-                epk: encryptedPrivKey, 
-                ph: passHash,
-                owner_uid: auth.currentUser.uid 
-            });
-            alert("🔑 Новый пароль установлен. Ключи перегенерированы.");
-            
-            const isAdmin = await isRealAdmin(userHash);
-            mySession = { u: userHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
-            localStorage.setItem('ghost_session', JSON.stringify(mySession));
-            window.location.hash = isAdmin ? '#/admin' : '#/app';
-            return;
+        if (userData.ph && userData.ph !== passHash) {
+            return alert("❌ Неверный пароль!");
         }
-
-        if (userData.ph !== passHash) return alert("❌ Неверный пароль!");
 
         let privJwk = null;
         try {
@@ -225,15 +206,17 @@ document.getElementById('btn-register').addEventListener('click', async () => {
             return alert("❌ Ошибка дешифровки ключей. Проверьте пароль.");
         }
 
-        // Обновляем привязку устройства. Игнорируем ошибку, если зашли с нового девайса
         try { await db.ref(`users/${userHash}/owner_uid`).set(auth.currentUser.uid); } catch(e) {}
 
-        const isAdmin = await isRealAdmin(userHash);
-        
-        // Если админ заходит по мастер-ссылке, прописываем его в базу прав
-        const pendingToken = sessionStorage.getItem('pending_admin_token');
-        if (isAdmin && pendingToken) {
-            try { await db.ref(`admin_uids/${auth.currentUser.uid}`).set(pendingToken); } catch(e) {}
+        let isAdmin = await isRealAdmin(userHash);
+
+        // Если админ заходит по Мастер-ссылке в существующий аккаунт — подтверждаем его права
+        if (isPendingAdmin && pendingToken) {
+            try {
+                await db.ref(`admin_uids/${auth.currentUser.uid}`).set(pendingToken);
+                await db.ref(`admins/${userHash}`).set(true);
+                isAdmin = true;
+            } catch(e) { console.error(e); }
         }
 
         mySession = { u: userHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
@@ -244,19 +227,20 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         window.location.hash = isAdmin ? '#/admin' : '#/app';
 
     } else {
-        // ================= ЛОГИКА РЕГИСТРАЦИИ =================
-        const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
-        const pendingToken = sessionStorage.getItem('pending_admin_token');
-
+        // ================= ЛОГИКА РЕГИСТРАЦИИ (Новый пользователь) =================
         if (!currentInviteData && !isPendingAdmin) {
-            return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта (требуется инвайт).");
+            return alert("❌ Ошибка: Создание аккаунта возможно только по действенной ссылке.");
+        }
+
+        if (currentInviteData && currentInviteData.userHash) {
+            return alert("❌ Этот инвайт уже активирован другим пользователем.");
         }
 
         const passConfirm = document.getElementById('reg-password-confirm').value.trim();
         const isChecked = document.getElementById('reg-checkbox').checked;
 
         if (pass !== passConfirm) return alert("❌ Пароли не совпадают!");
-        if (!isChecked) return alert("❌ Подтвердите, что сохранили данные.");
+        if (!isChecked) return alert("❌ Пожалуйста, подтвердите сохранение данных (поставьте галочку).");
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
@@ -299,7 +283,7 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 document.getElementById('btn-logout').onclick = () => {
     if (mySession) db.ref(`presence/${mySession.u}`).remove();
     localStorage.removeItem('ghost_session');
-    // 🔥 МЫ БОЛЬШЕ НЕ ДЕЛАЕМ auth.signOut(). Токен устройства остается живым!
-    window.location.hash = '#/login'; 
+    mySession = null;
+    window.location.hash = ''; 
     window.location.reload();
 };
