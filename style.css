@@ -96,11 +96,19 @@ button.admin-btn { background: #f59e0b; color: #000; font-weight: bold; display:
 .admin-table th { background: #182234; color: var(--text-secondary); font-size: 0.85em; text-transform: uppercase; }
 .admin-table tr:hover { background: var(--bg-hover); }
 
-.action-btns { display: flex; gap: 6px; flex-wrap: wrap; }
-.btn-ban { background: #dc2626; color: white; border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
-.btn-unban { background: var(--success); color: black; border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
-.btn-delete { background: #7f1d1d; color: #fca5a5; border: 1px solid #dc2626; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
-.btn-edit { background: #3b82f6; color: white; border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
+/* 🔥 КНОПКИ УПРАВЛЕНИЯ В АДМИНКЕ (Новые + Базовые) */
+.action-btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.btn-ban { background: #dc2626; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
+.btn-unban { background: var(--success); color: black; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
+.btn-delete { background: transparent; color: #ef4444; border: 1px solid #dc2626; padding: 5px 9px; border-radius: 4px; cursor: pointer; font-size: 0.8em; transition: 0.2s; }
+.btn-delete:hover { background: #ef4444; color: white; }
+
+.btn-copy { background: #3b82f6; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; transition: 0.2s; }
+.btn-copy:hover { background: #2563eb; }
+.btn-reissue { background: #f59e0b; color: black; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: 500; transition: 0.2s; }
+.btn-reissue:hover { background: #d97706; color: white; }
+.btn-restore { background: #7f1d1d; color: white; border: 1px dashed #fca5a5; padding: 5px 9px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: bold; transition: 0.2s; }
+.btn-restore:hover { background: #dc2626; border-color: #fff; box-shadow: 0 0 10px rgba(220, 38, 38, 0.5); }
 
 .admin-card { background: var(--bg-surface); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color); }
 .admin-card h3 { margin-top: 0; color: var(--accent); }
