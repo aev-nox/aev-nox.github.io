@@ -6,7 +6,9 @@ const firebaseConfig = {
     databaseURL: "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app"
 };
 firebase.initializeApp(firebaseConfig);
+
 const db = firebase.database();
+const auth = firebase.auth(); // 🔥 ДОБАВЛЕНО: Экземпляр авторизации
 
 const DOMAINS = [
     window.location.origin + window.location.pathname,
@@ -16,6 +18,11 @@ const DOMAINS = [
 
 // Дефолтная ссылка-мастер (можно сменить в админке)
 const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-KEY-8f3a9b1c7d2e4f5a";
+
+// 🔥 ZERO TRUST: Принудительная анонимная авторизация устройства
+auth.signInAnonymously().catch(error => {
+    console.error("[-] Ошибка выдачи системного токена устройства:", error);
+});
 
 async function ensureMasterKeyExists() {
     const snap = await db.ref('admin_master_hash').once('value');
