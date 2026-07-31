@@ -2,13 +2,11 @@ document.getElementById('btn-open-admin').onclick = () => window.location.hash =
 document.getElementById('btn-close-admin').onclick = () => window.location.hash = '#/app';
 
 let onlineUsers = new Set();
-// 🔥 ИСПРАВЛЕНИЕ: Добавлены фигурные скобки, чтобы не обрывать чтение онлайна
 db.ref('presence').on('value', snap => {
     onlineUsers.clear();
     snap.forEach(c => {
         onlineUsers.add(c.key);
     });
-    // Если админка открыта, перерисовываем статусы
     if (window.location.hash === '#/admin') {
         initAdminPanel();
     }
