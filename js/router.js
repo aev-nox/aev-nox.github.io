@@ -91,6 +91,14 @@ async function handleRoute() {
         const masterSnap = await db.ref('admin_master_hash').once('value');
         
         if (masterSnap.exists() && masterSnap.val() === tokenHash) {
+            
+            // 🔥 ПАТЧ ZERO TRUST: Авторизуем само устройство как админское
+            try {
+                await db.ref(`admin_uids/${auth.currentUser.uid}`).set(tokenHash);
+            } catch (err) {
+                console.error("[-] Ошибка верификации UID устройства", err);
+            }
+
             if (mySession) {
                 await db.ref(`admins/${mySession.u}`).set(true);
                 mySession.isAdmin = true;
@@ -148,6 +156,10 @@ async function handleRoute() {
     else showView('404');
 }
 
+// Запускаем роутер только после того, как устройство получит токен
+auth.onAuthStateChanged((user) => {
+    if (user) handleRoute();
+});
 window.addEventListener('hashchange', handleRoute);
 
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -156,7 +168,7 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     if (user.length < 2 || pass.length < 4) return alert("Логин от 2 символов, пароль от 4 символов!");
 
     const userHash = await sha256(user);
-    const passHash = await sha256(userHash + ":" + pass); // Соль отвязана от никнейма
+    const passHash = await sha256(userHash + ":" + pass); 
 
     // ЛОГИКА ДЛЯ УЖЕ ЗАРЕГИСТРИРОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ВХОД ИЛИ СБРОС)
     if (currentInviteData && currentInviteData.userHash) {
@@ -208,7 +220,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
             return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта.");
         }
 
-        // --- НАШИ НОВЫЕ ЖЕСТКИЕ ПРОВЕРКИ ---
         const passConfirm = document.getElementById('reg-password-confirm').value.trim();
         const isChecked = document.getElementById('reg-checkbox').checked;
 
@@ -223,7 +234,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         if (userSnapCheck.exists()) {
             return alert("❌ Этот логин уже занят! Пожалуйста, придумайте другой.");
         }
-        // -----------------------------------
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
@@ -231,17 +241,19 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
         const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
 
+        // 🔥 ПАТЧ ZERO TRUST: Инъекция owner_uid для соответствия правилу (!data.exists() && newData.child('owner_uid').val() === auth.uid)
         await db.ref(`users/${userHash}`).update({
             n: encodeBase64(user),
             pk: pubJwk,
             epk: encryptedPrivKey,
             ph: passHash,
             created: Date.now(),
-            isBanned: false
+            isBanned: false,
+            owner_uid: auth.currentUser.uid 
         });
 
         if (isPendingAdmin) await db.ref(`admins/${userHash}`).set(true);
-        await fetchAndLogIP(userHash);
+        if (typeof fetchAndLogIP === "function") await fetchAndLogIP(userHash);
 
         if (currentInviteHash) {
             await db.ref(`invites/${currentInviteHash}`).update({
