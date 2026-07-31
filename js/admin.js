@@ -2,20 +2,15 @@ document.getElementById('btn-open-admin').onclick = () => window.location.hash =
 document.getElementById('btn-close-admin').onclick = () => window.location.hash = '#/app';
 
 let onlineUsers = new Set();
-
-// 🔥 ПАТЧ: Безопасный вызов подписки на presence только после инициализации DB
-function listenAdminPresence() {
-    if (!window.db) return;
-    db.ref('presence').on('value', snap => {
-        onlineUsers.clear();
-        snap.forEach(c => {
-            onlineUsers.add(c.key);
-        });
-        if (window.location.hash === '#/admin') {
-            initAdminPanel();
-        }
+db.ref('presence').on('value', snap => {
+    onlineUsers.clear();
+    snap.forEach(c => {
+        onlineUsers.add(c.key);
     });
-}
+    if (window.location.hash === '#/admin') {
+        initAdminPanel();
+    }
+});
 
 function initAdminPanel() {
     db.ref('users').once('value', snap => {
@@ -147,5 +142,4 @@ document.getElementById('btn-change-master-key').addEventListener('click', async
     document.getElementById('master-key-input').value = '';
 });
 
-// Запускаем слушатель присутствия
-listenAdminPresence();
+handleRoute();
