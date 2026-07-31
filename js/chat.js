@@ -1,5 +1,41 @@
 window.fetchAndLogIP = async function(userHash) { return; };
 
+let unreadListeners = {};
+
+// 🔥 МАКСИМАЛЬНО ЛЁГКИЙ СЛУШАТЕЛЬ НЕПРОЧИТАННЫХ СООБЩЕНИЙ (1 СООБЩЕНИЕ НА ЧАТ)
+async function listenUnreadForContact(peerHash) {
+    const hashes = [mySession.u, peerHash].sort();
+    const roomId = await sha256(hashes[0] + "_" + hashes[1]);
+    
+    if (unreadListeners[peerHash]) {
+        db.ref(`rooms/${unreadListeners[peerHash]}/messages`).off();
+    }
+    unreadListeners[peerHash] = roomId;
+
+    const readKey = `ghost_read_${roomId}`;
+    
+    db.ref(`rooms/${roomId}/messages`).limitToLast(1).on('child_added', (snap) => {
+        const msg = snap.val();
+        if (!msg || !msg.t) return;
+
+        const lastReadTimestamp = Number(localStorage.getItem(readKey) || 0);
+        const isFromPeer = msg.s === peerHash;
+        const isCurrentActiveRoom = (currentRoomId === roomId);
+
+        if (isCurrentActiveRoom) {
+            localStorage.setItem(readKey, Date.now());
+            const contactItem = document.getElementById(`contact-${peerHash}`);
+            if (contactItem) contactItem.classList.remove('has-unread');
+            return;
+        }
+
+        if (isFromPeer && msg.t > lastReadTimestamp) {
+            const contactItem = document.getElementById(`contact-${peerHash}`);
+            if (contactItem) contactItem.classList.add('has-unread');
+        }
+    });
+}
+
 async function initDashboard() {
     document.getElementById('my-name-display').textContent = mySession.name;
     
@@ -9,7 +45,6 @@ async function initDashboard() {
     const myPresenceRef = db.ref(`presence/${mySession.u}`);
     const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
     
-    // 🔥 ПАТЧ ZERO TRUST: Ждем выдачи токена Firebase Auth перед установкой Presence
     auth.onAuthStateChanged((user) => {
         if (user) {
             db.ref('.info/connected').on('value', (snap) => {
@@ -92,13 +127,18 @@ async function initDashboard() {
             div.innerHTML = `
                 <div class="status-dot" id="status-${hash}"></div>
                 <div style="flex:1; min-width: 0; display: flex; flex-direction: column;">
-                    <div class="contact-name">${escapeHTML(name)}</div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <div class="contact-name">${escapeHTML(name)}</div>
+                        <div class="unread-badge" id="unread-${hash}" title="Новое сообщение"></div>
+                    </div>
                     <div class="last-seen">Был: ${formatTime(data.lastSeen)}</div>
                 </div>
                 <button class="btn-sm" style="background: transparent; border: 1px solid var(--border-color); color: var(--danger); padding: 4px 8px; font-size: 0.8em;" onclick="event.stopPropagation(); deleteContact('${hash}')" title="Удалить контакт">❌</button>
             `;
             div.onclick = () => openChat(hash, name);
             list.appendChild(div);
+
+            listenUnreadForContact(hash);
         });
         
         db.ref('presence').once('value').then(snap => updatePresenceUI(snap));
@@ -156,7 +196,6 @@ if (searchBtn) {
     });
 }
 
-// 🔥 ПАТЧ ZERO TRUST: Проходит благодаря твоему крутому правилу проверки owner_uid как $userHash или $contactHash
 window.addContact = async function(hash, name) {
     await db.ref(`users/${mySession.u}/contacts/${hash}`).set(Date.now());
     await db.ref(`users/${hash}/contacts/${mySession.u}`).set(Date.now());
@@ -184,7 +223,10 @@ async function openChat(peerHash, peerName) {
 
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
     const targetContact = document.getElementById(`contact-${peerHash}`);
-    if (targetContact) targetContact.classList.add('active');
+    if (targetContact) {
+        targetContact.classList.add('active');
+        targetContact.classList.remove('has-unread');
+    }
     
     document.getElementById('chat-header-name').textContent = escapeHTML(peerName);
     const msgsContainer = document.getElementById('messages-container');
@@ -201,6 +243,8 @@ async function openChat(peerHash, peerName) {
 
     const hashes = [mySession.u, peerHash].sort();
     currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+
+    localStorage.setItem(`ghost_read_${currentRoomId}`, Date.now());
 
     if (window.currentPeerPkRef) window.currentPeerPkRef.off();
     window.currentPeerPkRef = db.ref(`users/${peerHash}/pk`);
@@ -243,6 +287,11 @@ async function openChat(peerHash, peerName) {
     db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
         const msg = snapMsg.val();
         const msgKey = snapMsg.key;
+
+        if (msg && msg.t) {
+            localStorage.setItem(`ghost_read_${currentRoomId}`, msg.t);
+            if (targetContact) targetContact.classList.remove('has-unread');
+        }
 
         const ttlSnap = await db.ref(`rooms/${currentRoomId}/ttl`).once('value');
         const ttlVal = Number(ttlSnap.val() || 0);
