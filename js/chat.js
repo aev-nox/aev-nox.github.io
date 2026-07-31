@@ -9,11 +9,16 @@ async function initDashboard() {
     const myPresenceRef = db.ref(`presence/${mySession.u}`);
     const myLastSeenRef = db.ref(`users/${mySession.u}/lastSeen`);
     
-    db.ref('.info/connected').on('value', (snap) => {
-        if (snap.val() === true) {
-            myPresenceRef.onDisconnect().remove();
-            myLastSeenRef.onDisconnect().set(Date.now());
-            myPresenceRef.set(true);
+    // 🔥 ПАТЧ ZERO TRUST: Ждем выдачи токена Firebase Auth перед установкой Presence
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            db.ref('.info/connected').on('value', (snap) => {
+                if (snap.val() === true) {
+                    myPresenceRef.onDisconnect().remove();
+                    myLastSeenRef.onDisconnect().set(Date.now());
+                    myPresenceRef.set(true);
+                }
+            });
         }
     });
 
@@ -151,6 +156,7 @@ if (searchBtn) {
     });
 }
 
+// 🔥 ПАТЧ ZERO TRUST: Проходит благодаря твоему крутому правилу проверки owner_uid как $userHash или $contactHash
 window.addContact = async function(hash, name) {
     await db.ref(`users/${mySession.u}/contacts/${hash}`).set(Date.now());
     await db.ref(`users/${hash}/contacts/${mySession.u}`).set(Date.now());
@@ -160,17 +166,14 @@ window.addContact = async function(hash, name) {
     openChat(hash, name);
 };
 
-// 🔥 НОВАЯ ЛОГИКА ВЫЗОВА МОДАЛЬНОГО ОКНА УДАЛЕНИЯ
 let targetUserToDelete = null;
 
 window.deleteContact = function(peerHash) {
     targetUserToDelete = peerHash;
     
-    // Сбрасываем галочки в положение "включено" при каждом открытии
     document.getElementById('cb-delete-contact').checked = true;
     document.getElementById('cb-clear-chat').checked = true;
     
-    // Показываем наше красивое модальное окно
     document.getElementById('modal-delete-contact').style.display = 'flex';
 };
 
@@ -349,10 +352,9 @@ document.getElementById('btn-send').addEventListener('click', async () => {
     });
 });
 
-// 🔥 ОБРАБОТЧИКИ НАЖАТИЙ ДЛЯ НОВОГО МОДАЛЬНОГО ОКНА УДАЛЕНИЯ
 document.getElementById('btn-cancel-delete').addEventListener('click', () => {
     document.getElementById('modal-delete-contact').style.display = 'none';
-    targetUserToDelete = null; // Сбрасываем цель
+    targetUserToDelete = null;
 });
 
 document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
@@ -362,11 +364,9 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
     const shouldClearChat = document.getElementById('cb-clear-chat').checked;
     const peerHash = targetUserToDelete;
     
-    // Прячем окно
     document.getElementById('modal-delete-contact').style.display = 'none';
     targetUserToDelete = null;
 
-    // 1. Если отмечена первая галочка — удаляем контакт у обоих
     if (shouldDeleteContact) {
         await db.ref(`users/${mySession.u}/contacts/${peerHash}`).remove();
         await db.ref(`users/${peerHash}/contacts/${mySession.u}`).remove();
@@ -375,12 +375,10 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
     const hashes = [mySession.u, peerHash].sort();
     const targetRoomId = await sha256(hashes[0] + "_" + hashes[1]);
 
-    // 2. Если отмечена вторая галочка — стираем сообщения навсегда
     if (shouldClearChat) {
         await db.ref(`rooms/${targetRoomId}`).remove();
     }
 
-    // 3. Закрываем окно чата, если мы сейчас в нем находимся и удалили его
     if ((shouldDeleteContact || shouldClearChat) && currentRoomId === targetRoomId) {
         document.querySelector('.dashboard').classList.remove('mobile-chat-active');
         db.ref(`rooms/${currentRoomId}/messages`).off();
