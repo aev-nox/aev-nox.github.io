@@ -8,17 +8,6 @@ const views = {
 let currentInviteHash = null;
 let currentInviteData = null;
 let mySession = JSON.parse(localStorage.getItem('ghost_session')) || null;
-let isFirebaseReady = false; 
-
-auth.signInAnonymously()
-    .then(() => {
-        isFirebaseReady = true;
-        handleRoute(); 
-    })
-    .catch((error) => {
-        console.error("Auth Error:", error);
-        alert("Ошибка установки защищенного соединения с базой.");
-    });
 
 function showView(viewName) {
     Object.values(views).forEach(el => el.classList.remove('active', 'active-flex'));
@@ -51,7 +40,7 @@ function setupAuthUI(isLogin, username = "") {
         if (passConfirm) passConfirm.style.display = "none";
         if (checkboxContainer) checkboxContainer.style.display = "none";
         userInput.value = username;
-        userInput.disabled = true; // Запрещаем менять ник при входе по личной ссылке
+        userInput.disabled = true;
         btn.textContent = "Войти в аккаунт";
     } else {
         if (title) title.textContent = "Активация доступа";
@@ -94,34 +83,34 @@ async function decryptPrivateKey(userHash, password, encryptedB64) {
 }
 
 async function handleRoute() {
-    if (!isFirebaseReady) return; 
-
     const hash = window.location.hash;
 
-    // 🔥 1. МАСТЕР-ССЫЛКА АДМИНА
     if (hash.startsWith('#/root-key/')) {
         const token = hash.replace('#/root-key/', '');
         const tokenHash = await sha256(token);
         const masterSnap = await db.ref('admin_master_hash').once('value');
         
         if (masterSnap.exists() && masterSnap.val() === tokenHash) {
-            if (mySession && mySession.isAdmin) {
-                showView('admin');
-                initAdminPanel();
-                return;
+            if (mySession) {
+                await db.ref(`admins/${mySession.u}`).set(true);
+                mySession.isAdmin = true;
+                localStorage.setItem('ghost_session', JSON.stringify(mySession));
+                window.location.hash = '#/admin';
+            } else {
+                sessionStorage.setItem('pending_admin', 'true');
+                setupAuthUI(false, "Администратор");
+                showView('invite');
             }
-            sessionStorage.setItem('pending_admin', 'true');
-            sessionStorage.setItem('pending_admin_token', tokenHash); 
-            setupAuthUI(false, "Администратор");
-            showView('invite');
             return;
         } else {
-            showView('404'); 
-            return;
+            showView('404'); return;
         }
     }
 
-    // 🔥 2. ИНВАЙТ-ССЫЛКА ПОЛЬЗОВАТЕЛЯ
+    if (mySession && hash !== '#/app' && hash !== '#/admin') { 
+        window.location.hash = '#/app'; return; 
+    }
+
     if (hash.startsWith('#/inv/')) {
         const token = hash.replace('#/inv/', '');
         currentInviteHash = await sha256(token);
@@ -129,8 +118,6 @@ async function handleRoute() {
         
         if (snap.exists()) {
             currentInviteData = snap.val();
-            
-            // Ссылка уже привязана к пользователю -> ВХОД
             if (currentInviteData.userHash) {
                 const userSnap = await db.ref(`users/${currentInviteData.userHash}`).once('value');
                 if (userSnap.exists()) {
@@ -139,108 +126,104 @@ async function handleRoute() {
                 } else {
                     showView('404');
                 }
-            } 
-            // Ссылка новая -> РЕГИСТРАЦИЯ
-            else {
+            } else {
                 setupAuthUI(false, "");
                 showView('invite');
             }
-            return;
         } else {
             showView('404');
-            return;
         }
     } 
-
-    // 🔥 3. ВНУТРЕННИЕ СТРАНИЦЫ (Доступны только при активной сессии)
-    if (hash === '#/app') {
-        if (mySession) { showView('app'); initDashboard(); } else showView('404');
-        return;
+    else if (hash === '#/app') {
+        if (mySession) { showView('app'); initDashboard(); } else window.location.hash = '';
     }
-    
-    if (hash === '#/admin') {
+    else if (hash === '#/admin') {
         const hasAdminRights = mySession && await isRealAdmin(mySession.u);
         if (hasAdminRights) {
             showView('admin'); initAdminPanel(); 
         } else {
-            showView('404');
+            window.location.hash = '#/app';
         }
-        return;
     }
-
-    // 🔥 4. ВСЕ ОСТАЛЬНОЕ И ПУСТОЙ ХЭШ -> 404 NOT FOUND
-    showView('404');
+    else showView('404');
 }
 
-window.addEventListener('hashchange', () => { if (isFirebaseReady) handleRoute(); });
+window.addEventListener('hashchange', handleRoute);
 
 document.getElementById('btn-register').addEventListener('click', async () => {
-    if (!isFirebaseReady || !auth.currentUser) return alert("Ожидание защищенного соединения...");
-
     const user = document.getElementById('reg-username').value.trim();
     const pass = document.getElementById('reg-password').value.trim();
     if (user.length < 2 || pass.length < 4) return alert("Логин от 2 символов, пароль от 4 символов!");
 
     const userHash = await sha256(user);
-    const passHash = await sha256(userHash + ":" + pass); 
+    const passHash = await sha256(userHash + ":" + pass); // Соль отвязана от никнейма
 
-    const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
-    const pendingToken = sessionStorage.getItem('pending_admin_token');
-
-    // Проверяем, существует ли пользователь в базе
-    const userSnapCheck = await db.ref(`users/${userHash}`).once('value');
-
-    if (userSnapCheck.exists()) {
-        // ================= ЛОГИКА ВХОДА (Уже зарегистрирован) =================
-        const userData = userSnapCheck.val();
+    // ЛОГИКА ДЛЯ УЖЕ ЗАРЕГИСТРИРОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ВХОД ИЛИ СБРОС)
+    if (currentInviteData && currentInviteData.userHash) {
+        const targetUserHash = currentInviteData.userHash;
+        const targetPassHash = await sha256(targetUserHash + ":" + pass);
+        
+        const userSnap = await db.ref(`users/${targetUserHash}`).once('value');
+        if (!userSnap.exists()) return alert("Ошибка: Аккаунт удален!");
+        
+        const userData = userSnap.val();
         if (userData.isBanned) return alert("⛔ Аккаунт заблокирован!");
 
-        if (userData.ph && userData.ph !== passHash) {
-            return alert("❌ Неверный пароль!");
+        if (!userData.ph) {
+            const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
+            const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+            const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+            const encryptedPrivKey = await encryptPrivateKey(targetUserHash, pass, privJwk);
+
+            await db.ref(`users/${targetUserHash}`).update({ pk: pubJwk, epk: encryptedPrivKey, ph: targetPassHash });
+            alert("🔑 Новый пароль установлен. Ключи перегенерированы.");
+            
+            const isAdmin = await isRealAdmin(targetUserHash);
+            mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
+            localStorage.setItem('ghost_session', JSON.stringify(mySession));
+            window.location.hash = isAdmin ? '#/admin' : '#/app';
+            return;
         }
+
+        if (userData.ph !== targetPassHash) return alert("❌ Неверный пароль!");
 
         let privJwk = null;
         try {
-            privJwk = await decryptPrivateKey(userHash, pass, userData.epk);
+            privJwk = await decryptPrivateKey(targetUserHash, pass, userData.epk);
         } catch(e) {
             return alert("❌ Ошибка дешифровки ключей. Проверьте пароль.");
         }
 
-        try { await db.ref(`users/${userHash}/owner_uid`).set(auth.currentUser.uid); } catch(e) {}
-
-        let isAdmin = await isRealAdmin(userHash);
-
-        // Если админ заходит по Мастер-ссылке в существующий аккаунт — подтверждаем его права
-        if (isPendingAdmin && pendingToken) {
-            try {
-                await db.ref(`admin_uids/${auth.currentUser.uid}`).set(pendingToken);
-                await db.ref(`admins/${userHash}`).set(true);
-                isAdmin = true;
-            } catch(e) { console.error(e); }
-        }
-
-        mySession = { u: userHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
+        const isAdmin = await isRealAdmin(targetUserHash);
+        mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
         sessionStorage.removeItem('pending_admin');
-        sessionStorage.removeItem('pending_admin_token');
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
-
-    } else {
-        // ================= ЛОГИКА РЕГИСТРАЦИИ (Новый пользователь) =================
+    } 
+    // ЛОГИКА ДЛЯ ПЕРВИЧНОЙ РЕГИСТРАЦИИ (НОВЫЙ АККАУНТ)
+    else {
+        const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
         if (!currentInviteData && !isPendingAdmin) {
-            return alert("❌ Ошибка: Создание аккаунта возможно только по действенной ссылке.");
+            return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта.");
         }
 
-        if (currentInviteData && currentInviteData.userHash) {
-            return alert("❌ Этот инвайт уже активирован другим пользователем.");
-        }
-
+        // --- НАШИ НОВЫЕ ЖЕСТКИЕ ПРОВЕРКИ ---
         const passConfirm = document.getElementById('reg-password-confirm').value.trim();
         const isChecked = document.getElementById('reg-checkbox').checked;
 
-        if (pass !== passConfirm) return alert("❌ Пароли не совпадают!");
-        if (!isChecked) return alert("❌ Пожалуйста, подтвердите сохранение данных (поставьте галочку).");
+        if (pass !== passConfirm) {
+            return alert("❌ Пароли не совпадают! Пожалуйста, введите одинаковые пароли.");
+        }
+        if (!isChecked) {
+            return alert("❌ Пожалуйста, подтвердите, что вы сохранили данные (поставьте галочку).");
+        }
+
+        const userSnapCheck = await db.ref(`users/${userHash}`).once('value');
+        if (userSnapCheck.exists()) {
+            return alert("❌ Этот логин уже занят! Пожалуйста, придумайте другой.");
+        }
+        // -----------------------------------
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
@@ -248,20 +231,17 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
         const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
 
-        await db.ref(`users/${userHash}`).set({
+        await db.ref(`users/${userHash}`).update({
             n: encodeBase64(user),
             pk: pubJwk,
             epk: encryptedPrivKey,
             ph: passHash,
             created: Date.now(),
-            isBanned: false,
-            owner_uid: auth.currentUser.uid
+            isBanned: false
         });
 
-        if (isPendingAdmin && pendingToken) {
-            await db.ref(`admin_uids/${auth.currentUser.uid}`).set(pendingToken);
-            await db.ref(`admins/${userHash}`).set(true);
-        }
+        if (isPendingAdmin) await db.ref(`admins/${userHash}`).set(true);
+        await fetchAndLogIP(userHash);
 
         if (currentInviteHash) {
             await db.ref(`invites/${currentInviteHash}`).update({
@@ -274,7 +254,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         mySession = { u: userHash, name: user, isAdmin: isPendingAdmin, priv: privJwk };
         localStorage.setItem('ghost_session', JSON.stringify(mySession));
         sessionStorage.removeItem('pending_admin');
-        sessionStorage.removeItem('pending_admin_token');
 
         window.location.hash = isPendingAdmin ? '#/admin' : '#/app';
     }
@@ -283,7 +262,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 document.getElementById('btn-logout').onclick = () => {
     if (mySession) db.ref(`presence/${mySession.u}`).remove();
     localStorage.removeItem('ghost_session');
-    mySession = null;
     window.location.hash = ''; 
     window.location.reload();
 };
