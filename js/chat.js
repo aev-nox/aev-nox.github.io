@@ -2,7 +2,6 @@ window.fetchAndLogIP = async function(userHash) { return; };
 
 let unreadListeners = {};
 
-// 🔥 МАКСИМАЛЬНО ЛЁГКИЙ СЛУШАТЕЛЬ НЕПРОЧИТАННЫХ СООБЩЕНИЙ (1 СООБЩЕНИЕ НА ЧАТ)
 async function listenUnreadForContact(peerHash) {
     const hashes = [mySession.u, peerHash].sort();
     const roomId = await sha256(hashes[0] + "_" + hashes[1]);
@@ -209,14 +208,16 @@ let targetUserToDelete = null;
 
 window.deleteContact = function(peerHash) {
     targetUserToDelete = peerHash;
-    
     document.getElementById('cb-delete-contact').checked = true;
     document.getElementById('cb-clear-chat').checked = true;
-    
     document.getElementById('modal-delete-contact').style.display = 'flex';
 };
 
+// 🔥 ПАТЧ ОТ БАГОВ: Жесткий контроль слушателей Firebase
 let currentRoomId = null, currentRoomKey = null;
+let currentMessagesCallback = null;
+let currentTtlCallback = null;
+let currentMessagesValueCallback = null;
 
 async function openChat(peerHash, peerName) {
     document.querySelector('.dashboard').classList.add('mobile-chat-active');
@@ -236,13 +237,16 @@ async function openChat(peerHash, peerName) {
     document.getElementById('crypto-badge').style.display = 'none';
     document.getElementById('chat-controls').style.display = 'none';
 
+    // 🔥 ПАТЧ: Отключаем только конкретные колбэки текущего чата, не ломая фоновые процессы!
     if (currentRoomId) {
-        db.ref(`rooms/${currentRoomId}/messages`).off();
-        db.ref(`rooms/${currentRoomId}/ttl`).off();
+        if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
+        if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
+        if (currentTtlCallback) db.ref(`rooms/${currentRoomId}/ttl`).off('value', currentTtlCallback);
     }
 
     const hashes = [mySession.u, peerHash].sort();
     currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
+    currentRoomKey = null; // Сбрасываем ключ для нового чата
 
     localStorage.setItem(`ghost_read_${currentRoomId}`, Date.now());
 
@@ -279,35 +283,45 @@ async function openChat(peerHash, peerName) {
         }
     });
 
-    db.ref(`rooms/${currentRoomId}/ttl`).on('value', (snap) => {
+    currentTtlCallback = db.ref(`rooms/${currentRoomId}/ttl`).on('value', (snap) => {
         const ttl = snap.val() || "0";
         document.getElementById('auto-clean-select').value = ttl;
     });
 
-    db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
+    currentMessagesCallback = db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
         const msg = snapMsg.val();
         const msgKey = snapMsg.key;
+        const msgRoomId = currentRoomId; 
 
         if (msg && msg.t) {
-            localStorage.setItem(`ghost_read_${currentRoomId}`, msg.t);
+            localStorage.setItem(`ghost_read_${msgRoomId}`, msg.t);
             if (targetContact) targetContact.classList.remove('has-unread');
         }
 
-        const ttlSnap = await db.ref(`rooms/${currentRoomId}/ttl`).once('value');
+        const ttlSnap = await db.ref(`rooms/${msgRoomId}/ttl`).once('value');
         const ttlVal = Number(ttlSnap.val() || 0);
         if (ttlVal > 0 && msg.t && (Date.now() - msg.t > ttlVal)) {
-            db.ref(`rooms/${currentRoomId}/messages/${msgKey}`).remove();
+            db.ref(`rooms/${msgRoomId}/messages/${msgKey}`).remove();
             return;
         }
 
+        // 🔥 ПАТЧ: Ожидание ключа. Защита от гонки процессов на слабых телефонах!
+        let attempts = 0;
+        while (!currentRoomKey && attempts < 50 && currentRoomId === msgRoomId) {
+            await new Promise(r => setTimeout(r, 50)); 
+            attempts++;
+        }
+
         let decryptedText = "[Ошибка дешифровки]";
-        try {
-            const str = atob(msg.d);
-            const combined = new Uint8Array(str.length);
-            for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
-            const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
-            decryptedText = new TextDecoder().decode(decrypted);
-        } catch(e) {}
+        if (currentRoomKey) {
+            try {
+                const str = atob(msg.d);
+                const combined = new Uint8Array(str.length);
+                for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
+                const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
+                decryptedText = new TextDecoder().decode(decrypted);
+            } catch(e) {}
+        }
 
         const isMe = msg.s === mySession.u;
         const msgTime = msg.t ? new Date(msg.t).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) : '';
@@ -329,7 +343,7 @@ async function openChat(peerHash, peerName) {
         }, 50);
     });
 
-    db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
+    currentMessagesValueCallback = db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
         if (!snap.exists()) msgsContainer.innerHTML = '';
     });
 }
@@ -338,11 +352,14 @@ const backBtn = document.getElementById('btn-mobile-back');
 if (backBtn) {
     backBtn.addEventListener('click', () => {
         document.querySelector('.dashboard').classList.remove('mobile-chat-active');
+        // 🔥 ПАТЧ: Аккуратно отключаем слушатели при выходе из чата
         if (currentRoomId) {
-            db.ref(`rooms/${currentRoomId}/messages`).off();
-            db.ref(`rooms/${currentRoomId}/ttl`).off();
+            if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
+            if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
+            if (currentTtlCallback) db.ref(`rooms/${currentRoomId}/ttl`).off('value', currentTtlCallback);
         }
         currentRoomId = null;
+        currentRoomKey = null;
         document.getElementById('chat-header-name').textContent = "Выберите чат";
         document.getElementById('messages-container').innerHTML = '<div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>';
         document.getElementById('chat-input-area').style.display = 'none';
@@ -357,11 +374,28 @@ document.getElementById('auto-clean-select').addEventListener('change', async (e
     await db.ref(`rooms/${currentRoomId}/ttl`).set(val);
 });
 
-document.getElementById('btn-clear-chat').addEventListener('click', async () => {
+// 🔥 ПАТЧ: Новая логика корзины (модальное окно вместо встроенного confirm)
+document.getElementById('btn-clear-chat').addEventListener('click', () => {
     if (!currentRoomId) return;
-    if (confirm("⚠️ Вы уверены, что хотите полностью очистить историю сообщений? Переписка будет удалена У ОБОИХ участников.")) {
-        await db.ref(`rooms/${currentRoomId}/messages`).remove();
+    document.getElementById('cb-confirm-clear').checked = false;
+    document.getElementById('modal-clear-chat').style.display = 'flex';
+});
+
+document.getElementById('btn-cancel-clear').addEventListener('click', () => {
+    document.getElementById('modal-clear-chat').style.display = 'none';
+});
+
+document.getElementById('btn-confirm-clear').addEventListener('click', async () => {
+    if (!currentRoomId) return;
+    
+    const isChecked = document.getElementById('cb-confirm-clear').checked;
+    if (!isChecked) {
+        alert("❌ Пожалуйста, подтвердите очистку, поставив галочку.");
+        return;
     }
+    
+    await db.ref(`rooms/${currentRoomId}/messages`).remove();
+    document.getElementById('modal-clear-chat').style.display = 'none';
 });
 
 const msgInput = document.getElementById('msg-input');
@@ -430,8 +464,12 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
 
     if ((shouldDeleteContact || shouldClearChat) && currentRoomId === targetRoomId) {
         document.querySelector('.dashboard').classList.remove('mobile-chat-active');
-        db.ref(`rooms/${currentRoomId}/messages`).off();
-        db.ref(`rooms/${currentRoomId}/ttl`).off();
+        
+        // 🔥 ПАТЧ: Аккуратное отключение и тут тоже
+        if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
+        if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
+        if (currentTtlCallback) db.ref(`rooms/${currentRoomId}/ttl`).off('value', currentTtlCallback);
+        
         currentRoomId = null;
         currentRoomKey = null;
         document.getElementById('chat-header-name').textContent = "Выберите чат";
