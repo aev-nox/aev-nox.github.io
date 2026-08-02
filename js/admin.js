@@ -2,17 +2,17 @@ document.getElementById('btn-open-admin').onclick = () => window.location.hash =
 document.getElementById('btn-close-admin').onclick = () => window.location.hash = '#/app';
 
 let onlineUsers = new Set();
-db.ref('presence').on('value', snap => {
-    onlineUsers.clear();
-    snap.forEach(c => {
-        onlineUsers.add(c.key);
-    });
-    if (window.location.hash === '#/admin') {
-        initAdminPanel();
-    }
-});
 
 function initAdminPanel() {
+    if(!window.db) return;
+    db.ref('presence').on('value', snap => {
+        onlineUsers.clear();
+        snap.forEach(c => onlineUsers.add(c.key));
+        if (window.location.hash === '#/admin') renderAdminUsers();
+    });
+}
+
+function renderAdminUsers() {
     db.ref('users').once('value', snap => {
         const tbody = document.getElementById('admin-users-list');
         tbody.innerHTML = '';
@@ -49,16 +49,10 @@ function initAdminPanel() {
     });
 }
 
-function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-    );
-}
-
 window.toggleBan = async function(userHash, state) {
     if(confirm(state ? "Заблокировать пользователя?" : "Разблокировать пользователя?")) {
         await db.ref(`users/${userHash}/isBanned`).set(state);
-        initAdminPanel();
+        renderAdminUsers();
     }
 };
 
@@ -66,7 +60,7 @@ window.editUser = async function(userHash, currentName) {
     const newName = prompt("Введите новое имя:", currentName);
     if (newName && newName.trim().length >= 2) {
         await db.ref(`users/${userHash}/n`).set(encodeBase64(newName.trim()));
-        initAdminPanel();
+        renderAdminUsers();
     }
 };
 
@@ -82,7 +76,6 @@ window.resetPassword = async function(userHash) {
 
 window.deleteUserCompletely = async function(userHash) {
     if (!confirm("⚠️ ВНИМАНИЕ: Аккаунт будет удален навсегда! Продолжить?")) return;
-
     await db.ref(`users/${userHash}`).remove();
     await db.ref(`presence/${userHash}`).remove();
     await db.ref(`admins/${userHash}`).remove();
@@ -91,13 +84,11 @@ window.deleteUserCompletely = async function(userHash) {
     invitesSnap.forEach(child => {
         if (child.val().userHash === userHash) db.ref(`invites/${child.key}`).remove();
     });
-    
-    initAdminPanel();
+    renderAdminUsers();
 };
 
 window.regenerateUserLink = async function(userHash) {
-    if(!confirm("Математика Zero-Knowledge запрещает хранить ссылки в открытом виде. Старая ссылка сгорит (404), будет сгенерирована новая. Продолжить?")) return;
-
+    if(!confirm("Старая ссылка сгорит (404), будет сгенерирована новая. Продолжить?")) return;
     const rawToken = "GHOST-" + Math.random().toString(36).substring(2, 10).toUpperCase();
     const hashedToken = await sha256(rawToken);
 
@@ -106,17 +97,13 @@ window.regenerateUserLink = async function(userHash) {
         if (child.val().userHash === userHash) db.ref(`invites/${child.key}`).remove();
     });
 
-    await db.ref(`invites/${hashedToken}`).set({
-        userHash: userHash,
-        registered: true,
-        updatedAt: Date.now()
-    });
-
+    await db.ref(`invites/${hashedToken}`).set({ userHash: userHash, registered: true, updatedAt: Date.now() });
     await db.ref(`users/${userHash}/linkRevokedAt`).set(Date.now());
 
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    display.innerHTML = `✅ Новая персональная ссылка пользователя:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    // ИСПРАВЛЕНО: Используем MIRRORS
+    display.innerHTML = `✅ Новая персональная ссылка пользователя:<br><br>` + MIRRORS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 };
 
 document.getElementById('btn-generate-invite').addEventListener('click', async () => {
@@ -126,13 +113,13 @@ document.getElementById('btn-generate-invite').addEventListener('click', async (
     
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    // ИСПРАВЛЕНО: Используем MIRRORS
+    display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + MIRRORS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 });
 
 document.getElementById('btn-change-master-key').addEventListener('click', async () => {
     const newToken = document.getElementById('master-key-input').value.trim();
     if (newToken.length < 6) return alert("Токен должен быть не менее 6 символов!");
-
     const newHash = await sha256(newToken);
     await db.ref('admin_master_hash').set(newHash);
     
@@ -141,5 +128,3 @@ document.getElementById('btn-change-master-key').addEventListener('click', async
     statusDiv.innerHTML = `✅ Мастер-ключ обновлен! Новая ссылка админа:<br><strong>${window.location.origin}${window.location.pathname}#/root-key/${newToken}</strong>`;
     document.getElementById('master-key-input').value = '';
 });
-
-handleRoute();
