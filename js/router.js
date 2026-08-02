@@ -2,7 +2,8 @@ const views = {
     404: document.getElementById('view-404'),
     invite: document.getElementById('view-invite'),
     app: document.getElementById('view-app'),
-    admin: document.getElementById('view-admin')
+    admin: document.getElementById('view-admin'),
+    network: document.getElementById('view-network') // 🔥 Добавлен роут для страницы сети
 };
 
 let currentInviteHash = null;
@@ -115,7 +116,7 @@ async function handleRoute() {
         }
     }
 
-    if (mySession && hash !== '#/app' && hash !== '#/admin') { 
+    if (mySession && hash !== '#/app' && hash !== '#/admin' && hash !== '#/network') { 
         window.location.hash = '#/app'; return; 
     }
 
@@ -151,6 +152,16 @@ async function handleRoute() {
             showView('admin'); initAdminPanel(); 
         } else {
             window.location.hash = '#/app';
+        }
+    }
+    // 🔥 НОВЫЙ РОУТ СЕТИ
+    else if (hash === '#/network') {
+        if (mySession) {
+            showView('network');
+            const activeInfo = JSON.parse(localStorage.getItem('ghost_active_node'));
+            document.getElementById('net-current-node').innerText = activeInfo ? `${activeInfo.name}\n(${activeInfo.url})` : 'Неизвестно';
+        } else {
+            window.location.hash = '';
         }
     }
     else showView('404');
