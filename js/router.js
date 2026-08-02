@@ -3,7 +3,7 @@ const views = {
     invite: document.getElementById('view-invite'),
     app: document.getElementById('view-app'),
     admin: document.getElementById('view-admin'),
-    network: document.getElementById('view-network') // 🔥 Добавлен роут для страницы сети
+    network: document.getElementById('view-network')
 };
 
 let currentInviteHash = null;
@@ -84,6 +84,8 @@ async function decryptPrivateKey(userHash, password, encryptedB64) {
 }
 
 async function handleRoute() {
+    if (!window.auth || !window.db) return; // Защита от раннего старта
+
     const hash = window.location.hash;
 
     if (hash.startsWith('#/root-key/')) {
@@ -92,14 +94,7 @@ async function handleRoute() {
         const masterSnap = await db.ref('admin_master_hash').once('value');
         
         if (masterSnap.exists() && masterSnap.val() === tokenHash) {
-            
-            // 🔥 ПАТЧ ZERO TRUST: Авторизуем само устройство как админское
-            try {
-                await db.ref(`admin_uids/${auth.currentUser.uid}`).set(tokenHash);
-            } catch (err) {
-                console.error("[-] Ошибка верификации UID устройства", err);
-            }
-
+            try { await db.ref(`admin_uids/${auth.currentUser.uid}`).set(tokenHash); } catch(e){}
             if (mySession) {
                 await db.ref(`admins/${mySession.u}`).set(true);
                 mySession.isAdmin = true;
@@ -132,45 +127,40 @@ async function handleRoute() {
                 if (userSnap.exists()) {
                     setupAuthUI(true, decodeBase64(userSnap.val().n));
                     showView('invite');
-                } else {
-                    showView('404');
-                }
+                } else showView('404');
             } else {
                 setupAuthUI(false, "");
                 showView('invite');
             }
-        } else {
-            showView('404');
-        }
+        } else showView('404');
     } 
     else if (hash === '#/app') {
         if (mySession) { showView('app'); initDashboard(); } else window.location.hash = '';
     }
     else if (hash === '#/admin') {
         const hasAdminRights = mySession && await isRealAdmin(mySession.u);
-        if (hasAdminRights) {
-            showView('admin'); initAdminPanel(); 
-        } else {
-            window.location.hash = '#/app';
-        }
+        if (hasAdminRights) { showView('admin'); initAdminPanel(); } else window.location.hash = '#/app';
     }
-    // 🔥 НОВЫЙ РОУТ СЕТИ
     else if (hash === '#/network') {
-        if (mySession) {
-            showView('network');
-            const activeInfo = JSON.parse(localStorage.getItem('ghost_active_node'));
-            document.getElementById('net-current-node').innerText = activeInfo ? `${activeInfo.name}\n(${activeInfo.url})` : 'Неизвестно';
-        } else {
-            window.location.hash = '';
-        }
+        if (mySession) { showView('network'); renderNetworkDiagnostics(); } else window.location.hash = '';
     }
     else showView('404');
 }
 
-// Запускаем роутер только после того, как устройство получит токен
-auth.onAuthStateChanged((user) => {
-    if (user) handleRoute();
-});
+window.onFirebaseReady = () => {
+    // Гарантируем создание мастер-ключа после инициализации сети
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            const snap = await db.ref('admin_master_hash').once('value');
+            if (!snap.exists()) {
+                const defaultHash = await sha256(DEFAULT_MASTER_TOKEN);
+                await db.ref('admin_master_hash').set(defaultHash);
+            }
+            handleRoute();
+        }
+    });
+};
+
 window.addEventListener('hashchange', handleRoute);
 
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -181,7 +171,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     const userHash = await sha256(user);
     const passHash = await sha256(userHash + ":" + pass); 
 
-    // ЛОГИКА ДЛЯ УЖЕ ЗАРЕГИСТРИРОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ВХОД ИЛИ СБРОС)
     if (currentInviteData && currentInviteData.userHash) {
         const targetUserHash = currentInviteData.userHash;
         const targetPassHash = await sha256(targetUserHash + ":" + pass);
@@ -213,9 +202,7 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         let privJwk = null;
         try {
             privJwk = await decryptPrivateKey(targetUserHash, pass, userData.epk);
-        } catch(e) {
-            return alert("❌ Ошибка дешифровки ключей. Проверьте пароль.");
-        }
+        } catch(e) { return alert("❌ Ошибка дешифровки ключей. Проверьте пароль."); }
 
         const isAdmin = await isRealAdmin(targetUserHash);
         mySession = { u: targetUserHash, name: decodeBase64(userData.n), isAdmin: isAdmin, priv: privJwk };
@@ -223,36 +210,24 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         sessionStorage.removeItem('pending_admin');
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
-    } 
-    // ЛОГИКА ДЛЯ ПЕРВИЧНОЙ РЕГИСТРАЦИИ (НОВЫЙ АККАУНТ)
-    else {
+    } else {
         const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
-        if (!currentInviteData && !isPendingAdmin) {
-            return alert("❌ Ошибка: У вас нет прав для создания нового аккаунта.");
-        }
+        if (!currentInviteData && !isPendingAdmin) return alert("❌ У вас нет прав для создания нового аккаунта.");
 
         const passConfirm = document.getElementById('reg-password-confirm').value.trim();
         const isChecked = document.getElementById('reg-checkbox').checked;
 
-        if (pass !== passConfirm) {
-            return alert("❌ Пароли не совпадают! Пожалуйста, введите одинаковые пароли.");
-        }
-        if (!isChecked) {
-            return alert("❌ Пожалуйста, подтвердите, что вы сохранили данные (поставьте галочку).");
-        }
+        if (pass !== passConfirm) return alert("❌ Пароли не совпадают!");
+        if (!isChecked) return alert("❌ Подтвердите, что сохранили данные (галочка).");
 
         const userSnapCheck = await db.ref(`users/${userHash}`).once('value');
-        if (userSnapCheck.exists()) {
-            return alert("❌ Этот логин уже занят! Пожалуйста, придумайте другой.");
-        }
+        if (userSnapCheck.exists()) return alert("❌ Этот логин уже занят!");
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
         const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
         const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
-
         const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
 
-        // 🔥 ПАТЧ ZERO TRUST: Инъекция owner_uid для соответствия правилу (!data.exists() && newData.child('owner_uid').val() === auth.uid)
         await db.ref(`users/${userHash}`).update({
             n: encodeBase64(user),
             pk: pubJwk,
@@ -264,7 +239,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         });
 
         if (isPendingAdmin) await db.ref(`admins/${userHash}`).set(true);
-        if (typeof fetchAndLogIP === "function") await fetchAndLogIP(userHash);
 
         if (currentInviteHash) {
             await db.ref(`invites/${currentInviteHash}`).update({
@@ -283,7 +257,7 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 });
 
 document.getElementById('btn-logout').onclick = () => {
-    if (mySession) db.ref(`presence/${mySession.u}`).remove();
+    if (mySession && window.db) db.ref(`presence/${mySession.u}`).remove();
     localStorage.removeItem('ghost_session');
     window.location.hash = ''; 
     window.location.reload();
