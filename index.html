@@ -60,6 +60,7 @@
                             <button class="btn-sm logout" id="btn-logout">Выход</button>
                             <button class="btn-sm admin-btn" id="btn-open-admin">⚙️ Админ</button>
                         </div>
+                        <button class="btn-sm" id="btn-network-status" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); width: 100%; margin-top: 5px;" onclick="window.location.hash='#/network'">📡 Загрузка сети...</button>
                     </div>
                 </div>
                 
@@ -136,6 +137,36 @@
                 </div>
                 <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- 📡 ПАНЕЛЬ СТАТУСА СЕТИ И ЗЕРКАЛ -->
+    <div id="view-network" class="view">
+        <div class="admin-header">
+            <h2>📡 Состояние системы (DevOps)</h2>
+            <button class="btn-sm" id="btn-close-network" style="background: var(--bg-hover);" onclick="window.location.hash='#/app'">Вернуться в чат</button>
+        </div>
+        <div class="admin-content" style="max-width: 800px;">
+            
+            <div class="admin-card">
+                <h3 style="color: var(--success); margin-bottom: 5px;">Активный шлюз</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9em; margin-top: 0;">Ваш трафик сейчас зашифрован и маршрутизируется через этот узел:</p>
+                <div id="net-current-node" style="padding: 15px; background: rgba(34, 197, 94, 0.1); border: 1px solid var(--success); border-radius: 8px; font-weight: bold; font-family: monospace; font-size: 1.1em; text-align: center; margin-bottom: 15px;">
+                    Определение...
+                </div>
+                <button class="btn-sm" style="background: var(--accent); width: 100%; padding: 12px; font-weight: bold;" onclick="triggerFailover(true)">🔄 ПРИНУДИТЕЛЬНО НАЙТИ ЛУЧШИЙ СЕРВЕР</button>
+            </div>
+
+            <div class="admin-card">
+                <h3>Зеркала доступа (Сохраните в закладки)</h3>
+                <p style="color: var(--text-secondary); font-size: 0.85em; margin-bottom: 10px;">Если текущий сайт будет заблокирован, вы всегда можете открыть чат по этим ссылкам. Ваши данные и контакты будут на месте.</p>
+                <div class="invite-links" style="color: var(--accent);">
+https://aev-nox.github.io
+https://aev-nox.vercel.app
+https://aev-nox.gitlab.io
+                </div>
+            </div>
+
         </div>
     </div>
 
