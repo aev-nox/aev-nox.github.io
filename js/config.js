@@ -17,40 +17,50 @@ const MIRRORS = [
 
 const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-KEY-8f3a9b1c7d2e4f5a";
 
-// 1. Инициализация Сети (Гонка Пингов ДО запуска Firebase)
-(async function initSystem() {
-    let activeNode = JSON.parse(localStorage.getItem('ghost_node'));
-    
-    // Если узла нет (первый вход) - запускаем принудительный поиск
-    if (!activeNode) {
-        document.getElementById('boot-overlay').style.display = 'flex';
-        await triggerFailover(true); // Найдет узел и перезагрузит страницу
-        return; 
-    }
+// 1. Поиск лучшего сервера (Failover) - объявляем ПЕРВЫМ
+window.triggerFailover = async function(isInitial = false) {
+    console.log("[DevOps] 🚀 Запуск поиска оптимального узла...");
+    const msgEl = document.getElementById('boot-msg');
+    if (msgEl) msgEl.innerText = "Пинг серверов маршрутизации...";
 
-    // Если узел найден - инициализируем Firebase
-    firebase.initializeApp({
-        apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
-        authDomain: `${FIREBASE_PROJECT}.firebaseapp.com`,
-        projectId: FIREBASE_PROJECT,
-        databaseURL: activeNode.url
+    const promises = NETWORK_NODES.map(async (node) => {
+        const start = performance.now();
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const pingUrl = node.id === 'direct' ? `${node.url}/.json` : `${node.url}/ghost-ping`;
+            
+            const res = await fetch(pingUrl, { signal: controller.signal, cache: 'no-store' });
+            clearTimeout(timeoutId);
+            return { node, ping: Math.round(performance.now() - start), ok: res.ok || node.id !== 'direct' };
+        } catch (e) {
+            return { node, ping: 9999, ok: false };
+        }
     });
 
-    window.db = firebase.database();
-    window.auth = firebase.auth();
+    const results = await Promise.all(promises);
+    console.log("[DevOps] Результаты пинга:", results);
 
-    setupCircuitBreaker(activeNode);
-    auth.signInAnonymously().catch(e => console.error("Auth error:", e));
+    const alive = results.filter(r => r.ok).sort((a, b) => a.ping - b.ping);
 
-    if (window.onFirebaseReady) window.onFirebaseReady();
-})();
+    if (alive.length > 0) {
+        console.log("[DevOps] ✅ Выбран лучший узел:", alive[0].node.name);
+        localStorage.setItem('ghost_node', JSON.stringify(alive[0].node));
+        window.location.reload();
+    } else {
+        console.error("[DevOps] ❌ Все узлы заблокированы!");
+        if (msgEl) {
+            msgEl.innerText = "КРИТИЧЕСКАЯ ОШИБКА: Все шлюзы заблокированы!";
+            msgEl.style.color = "#ef4444";
+        }
+    }
+};
 
-// 2. Circuit Breaker (Предохранитель от обрывов)
+// 2. Предохранитель от обрывов связи
 function setupCircuitBreaker(activeNode) {
     let isConnected = false;
     let failTimeout;
 
-    // Даем 4 секунды на подключение. Если не вышло - ищем новый сервер.
     const initialTimer = setTimeout(() => {
         if (!isConnected) triggerFailover();
     }, 4000);
@@ -68,8 +78,9 @@ function setupCircuitBreaker(activeNode) {
         if (isConnected) {
             clearTimeout(initialTimer);
             clearTimeout(failTimeout);
+            const overlay = document.getElementById('boot-overlay');
+            if (overlay) overlay.style.display = 'none';
         } else {
-            // Если отвалились в процессе работы - ждем 4 сек и переключаем
             failTimeout = setTimeout(() => {
                 if (!isConnected) triggerFailover();
             }, 4000);
@@ -77,57 +88,29 @@ function setupCircuitBreaker(activeNode) {
     });
 }
 
-// 3. Failover (Умный поиск лучшего сервера)
-window.triggerFailover = async function(isInitial = false) {
-    if (!isInitial) document.getElementById('boot-overlay').style.display = 'flex';
-    document.getElementById('boot-msg').innerText = "Пинг серверов маршрутизации...";
-
-    const promises = NETWORK_NODES.map(async (node) => {
-        const start = performance.now();
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2000);
-            const pingUrl = node.id === 'direct' ? `${node.url}/.info.json` : `${node.url}/ghost-ping`;
-            
-            await fetch(pingUrl, { signal: controller.signal, cache: 'no-store' });
-            clearTimeout(timeoutId);
-            return { node, ping: Math.round(performance.now() - start), ok: true };
-        } catch (e) {
-            return { node, ping: 9999, ok: false };
-        }
-    });
-
-    const results = await Promise.all(promises);
-    const alive = results.filter(r => r.ok).sort((a, b) => a.ping - b.ping);
-
-    if (alive.length > 0) {
-        localStorage.setItem('ghost_node', JSON.stringify(alive[0].node));
-        window.location.reload(); // Мягкая перезагрузка с новым сервером
-    } else {
-        document.getElementById('boot-msg').innerText = "КРИТИЧЕСКАЯ ОШИБКА: Все шлюзы заблокированы!";
-        document.getElementById('boot-msg').style.color = "#ef4444";
-    }
-};
-
-// 4. Отрисовка страницы диагностики DevOps
+// 3. Диагностика сети на странице #/network
 window.renderNetworkDiagnostics = async function() {
     const activeNode = JSON.parse(localStorage.getItem('ghost_node'));
-    document.getElementById('net-current-node').innerText = activeNode ? `${activeNode.name}\n${activeNode.url}` : 'Неизвестно';
-    document.getElementById('mirrors-list').innerHTML = MIRRORS.join('<br>');
+    const currentEl = document.getElementById('net-current-node');
+    if (currentEl) currentEl.innerText = activeNode ? `${activeNode.name}\n${activeNode.url}` : 'Неизвестно';
+    
+    const mirrorsEl = document.getElementById('mirrors-list');
+    if (mirrorsEl) mirrorsEl.innerHTML = MIRRORS.join('<br>');
     
     const tbody = document.getElementById('network-nodes-list');
+    if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Выполняю Live Ping...</td></tr>';
 
     const promises = NETWORK_NODES.map(async (node) => {
         const start = performance.now();
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2000);
-            const pingUrl = node.id === 'direct' ? `${node.url}/.info.json` : `${node.url}/ghost-ping`;
+            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const pingUrl = node.id === 'direct' ? `${node.url}/.json` : `${node.url}/ghost-ping`;
             
-            await fetch(pingUrl, { signal: controller.signal, cache: 'no-store' });
+            const res = await fetch(pingUrl, { signal: controller.signal, cache: 'no-store' });
             clearTimeout(timeoutId);
-            return { node, ping: Math.round(performance.now() - start), ok: true };
+            return { node, ping: Math.round(performance.now() - start), ok: res.ok || node.id !== 'direct' };
         } catch (e) {
             return { node, ping: null, ok: false };
         }
@@ -141,7 +124,7 @@ window.renderNetworkDiagnostics = async function() {
         if (!res.ok) {
             statusBadge = `<span style="color:var(--danger); font-weight:bold;">🔴 Ошибка</span>`;
             pingText = "-";
-        } else if (res.ping < 200) {
+        } else if (res.ping < 250) {
             statusBadge = `<span style="color:var(--success); font-weight:bold;">🟢 Отлично</span>`;
             pingText = `${res.ping} ms`;
         } else {
@@ -167,3 +150,30 @@ async function isRealAdmin(userHash) {
     const snap = await db.ref(`admins/${userHash}`).once('value');
     return snap.exists() && snap.val() === true;
 }
+
+// 4. Инициализация запускается СТРОГО В КОНЦЕ
+(async function initSystem() {
+    let activeNode = JSON.parse(localStorage.getItem('ghost_node'));
+    
+    if (!activeNode) {
+        const overlay = document.getElementById('boot-overlay');
+        if (overlay) overlay.style.display = 'flex';
+        await triggerFailover(true);
+        return; 
+    }
+
+    firebase.initializeApp({
+        apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
+        authDomain: `${FIREBASE_PROJECT}.firebaseapp.com`,
+        projectId: FIREBASE_PROJECT,
+        databaseURL: activeNode.url
+    });
+
+    window.db = firebase.database();
+    window.auth = firebase.auth();
+
+    setupCircuitBreaker(activeNode);
+    auth.signInAnonymously().catch(e => console.error("Auth error:", e));
+
+    if (window.onFirebaseReady) window.onFirebaseReady();
+})();
