@@ -1,166 +1,169 @@
-// ==========================================
-// 🛡️ GHOST CORE: SMART NETWORK & CIRCUIT BREAKER
-// ==========================================
-
 const FIREBASE_PROJECT = "global-student-project";
 
-// 1. Пул узлов (Direct + Proxies)
 const NETWORK_NODES = [
-    { id: 'direct', name: 'Direct (Google EU)', url: `https://${FIREBASE_PROJECT}-default-rtdb.europe-west1.firebasedatabase.app` },
-    { id: 'deno', name: 'Deno Deploy 🦕', url: 'https://edge-deno.aev-nox.deno.net' },
-    { id: 'cf', name: 'Cloudflare ⚡', url: 'https://edge-flare.zuq.workers.dev' },
-    { id: 'netlify', name: 'Netlify Edge 💠', url: 'https://edge-netlify.netlify.app' },
-    { id: 'vercel', name: 'Vercel Edge 🔺', url: 'https://ed-ge-vercel.vercel.app' }
+    { id: 'direct', name: 'Direct (WebSocket)', url: `https://${FIREBASE_PROJECT}-default-rtdb.europe-west1.firebasedatabase.app`, type: 'WebSocket' },
+    { id: 'deno', name: 'Deno Deploy 🦕', url: 'https://edge-deno.aev-nox.deno.net', type: 'HTTP Proxy' },
+    { id: 'cf', name: 'Cloudflare ⚡', url: 'https://edge-flare.zuq.workers.dev', type: 'HTTP Proxy' },
+    { id: 'netlify', name: 'Netlify Edge 💠', url: 'https://edge-netlify.netlify.app', type: 'HTTP Proxy' },
+    { id: 'vercel', name: 'Vercel Edge 🔺', url: 'https://ed-ge-vercel.vercel.app', type: 'HTTP Proxy' }
 ];
 
-const DOMAINS = [
+const MIRRORS = [
     window.location.origin + window.location.pathname,
-    "https://aev-nox.vercel.app/",
-    "https://my-secret-domain.com/" // Заменишь потом на GitLab/GitHub
+    "https://aev-nox.github.io",
+    "https://aev-nox.vercel.app",
+    "https://aev-nox.gitlab.io"
 ];
 
 const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-KEY-8f3a9b1c7d2e4f5a";
 
-// 2. Определение текущего узла
-let activeNode = JSON.parse(localStorage.getItem('ghost_active_node'));
-if (!activeNode) {
-    activeNode = NETWORK_NODES[0]; // По умолчанию пробуем Direct
-    localStorage.setItem('ghost_active_node', JSON.stringify(activeNode));
+// 1. Инициализация Сети (Гонка Пингов ДО запуска Firebase)
+(async function initSystem() {
+    let activeNode = JSON.parse(localStorage.getItem('ghost_node'));
+    
+    // Если узла нет (первый вход) - запускаем принудительный поиск
+    if (!activeNode) {
+        document.getElementById('boot-overlay').style.display = 'flex';
+        await triggerFailover(true); // Найдет узел и перезагрузит страницу
+        return; 
+    }
+
+    // Если узел найден - инициализируем Firebase
+    firebase.initializeApp({
+        apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
+        authDomain: `${FIREBASE_PROJECT}.firebaseapp.com`,
+        projectId: FIREBASE_PROJECT,
+        databaseURL: activeNode.url
+    });
+
+    window.db = firebase.database();
+    window.auth = firebase.auth();
+
+    setupCircuitBreaker(activeNode);
+    auth.signInAnonymously().catch(e => console.error("Auth error:", e));
+
+    if (window.onFirebaseReady) window.onFirebaseReady();
+})();
+
+// 2. Circuit Breaker (Предохранитель от обрывов)
+function setupCircuitBreaker(activeNode) {
+    let isConnected = false;
+    let failTimeout;
+
+    // Даем 4 секунды на подключение. Если не вышло - ищем новый сервер.
+    const initialTimer = setTimeout(() => {
+        if (!isConnected) triggerFailover();
+    }, 4000);
+
+    db.ref('.info/connected').on('value', (snap) => {
+        isConnected = snap.val() === true;
+        
+        const btn = document.getElementById('btn-network-status');
+        if (btn) {
+            btn.innerHTML = isConnected 
+                ? `<span style="color:var(--success)">●</span> ${activeNode.name}`
+                : `<span style="color:var(--danger)">●</span> Обрыв сети...`;
+        }
+
+        if (isConnected) {
+            clearTimeout(initialTimer);
+            clearTimeout(failTimeout);
+        } else {
+            // Если отвалились в процессе работы - ждем 4 сек и переключаем
+            failTimeout = setTimeout(() => {
+                if (!isConnected) triggerFailover();
+            }, 4000);
+        }
+    });
 }
 
-// 3. Инициализация Firebase через выбранный узел
-const firebaseConfig = {
-    apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
-    authDomain: `${FIREBASE_PROJECT}.firebaseapp.com`,
-    projectId: FIREBASE_PROJECT,
-    databaseURL: activeNode.url
-};
+// 3. Failover (Умный поиск лучшего сервера)
+window.triggerFailover = async function(isInitial = false) {
+    if (!isInitial) document.getElementById('boot-overlay').style.display = 'flex';
+    document.getElementById('boot-msg').innerText = "Пинг серверов маршрутизации...";
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const auth = firebase.auth();
-
-auth.signInAnonymously().catch(e => console.error("Auth error:", e));
-
-// ==========================================
-// ⚙️ ПАТТЕРН "CIRCUIT BREAKER" (ПРЕДОХРАНИТЕЛЬ)
-// ==========================================
-let connectionTimeout;
-let isFirstConnect = true;
-
-db.ref('.info/connected').on('value', (snap) => {
-    const isConnected = snap.val() === true;
-    updateNetworkUI(isConnected, activeNode);
-
-    if (isConnected) {
-        console.log(`[Network] 🟢 Связь стабильна через: ${activeNode.name}`);
-        clearTimeout(connectionTimeout);
-        isFirstConnect = false;
-        
-        const overlay = document.getElementById('reconnect-overlay');
-        if (overlay) overlay.remove(); // Убираем экран переподключения, если был
-    } else {
-        console.warn(`[Network] ⚠️ Потеря связи. Ожидание восстановления...`);
-        
-        // Если это не холодный старт и связи нет > 4 секунд - инициируем Failover
-        if (!isFirstConnect) {
-            connectionTimeout = setTimeout(() => {
-                triggerFailover();
-            }, 4000); // 4 секунды на раздумья
-        }
-    }
-});
-
-// Глобальная функция поиска лучшего узла (Failover / Ping Race)
-window.triggerFailover = async function(manual = false) {
-    showReconnectingScreen(manual);
-    console.warn(`[Failover] 🚀 Инициализация гонки узлов...`);
-
-    const pingPromises = NETWORK_NODES.map(async (node) => {
+    const promises = NETWORK_NODES.map(async (node) => {
         const start = performance.now();
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+            const pingUrl = node.id === 'direct' ? `${node.url}/.info.json` : `${node.url}/ghost-ping`;
             
-            // Если Direct - стучимся в корень. Если прокси - в наш радар /ghost-ping
-            const checkUrl = node.id === 'direct' ? `${node.url}/.json` : `${node.url}/ghost-ping`;
-            
-            await fetch(checkUrl, { signal: controller.signal, mode: 'no-cors' });
+            await fetch(pingUrl, { signal: controller.signal, cache: 'no-store' });
             clearTimeout(timeoutId);
-            
-            return { node, ping: Math.round(performance.now() - start), status: 'ok' };
+            return { node, ping: Math.round(performance.now() - start), ok: true };
         } catch (e) {
-            return { node, ping: 9999, status: 'error' };
+            return { node, ping: 9999, ok: false };
         }
     });
 
-    const results = await Promise.all(pingPromises);
-    const aliveNodes = results.filter(r => r.status === 'ok').sort((a, b) => a.ping - b.ping);
+    const results = await Promise.all(promises);
+    const alive = results.filter(r => r.ok).sort((a, b) => a.ping - b.ping);
 
-    if (aliveNodes.length > 0) {
-        const bestNode = aliveNodes[0].node;
-        console.log(`[Failover] ✅ Победитель: ${bestNode.name} (${aliveNodes[0].ping}ms)`);
-        
-        // Если маршрут изменился или запрошено вручную — перезагружаем состояние
-        if (bestNode.id !== activeNode.id || manual) {
-            localStorage.setItem('ghost_active_node', JSON.stringify(bestNode));
-            setTimeout(() => window.location.reload(), 300); // Soft Reload
-        } else {
-            // Если старый узел оказался лучшим, просто ждем восстановления
-            const overlay = document.getElementById('reconnect-overlay');
-            if (overlay) overlay.remove();
+    if (alive.length > 0) {
+        localStorage.setItem('ghost_node', JSON.stringify(alive[0].node));
+        window.location.reload(); // Мягкая перезагрузка с новым сервером
+    } else {
+        document.getElementById('boot-msg').innerText = "КРИТИЧЕСКАЯ ОШИБКА: Все шлюзы заблокированы!";
+        document.getElementById('boot-msg').style.color = "#ef4444";
+    }
+};
+
+// 4. Отрисовка страницы диагностики DevOps
+window.renderNetworkDiagnostics = async function() {
+    const activeNode = JSON.parse(localStorage.getItem('ghost_node'));
+    document.getElementById('net-current-node').innerText = activeNode ? `${activeNode.name}\n${activeNode.url}` : 'Неизвестно';
+    document.getElementById('mirrors-list').innerHTML = MIRRORS.join('<br>');
+    
+    const tbody = document.getElementById('network-nodes-list');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Выполняю Live Ping...</td></tr>';
+
+    const promises = NETWORK_NODES.map(async (node) => {
+        const start = performance.now();
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+            const pingUrl = node.id === 'direct' ? `${node.url}/.info.json` : `${node.url}/ghost-ping`;
+            
+            await fetch(pingUrl, { signal: controller.signal, cache: 'no-store' });
+            clearTimeout(timeoutId);
+            return { node, ping: Math.round(performance.now() - start), ok: true };
+        } catch (e) {
+            return { node, ping: null, ok: false };
         }
-    } else {
-        document.getElementById('reconnect-msg').innerText = "КРИТИЧЕСКИЙ СБОЙ: Все шлюзы заблокированы.";
-    }
-}
+    });
 
-// UI: Экран бесшовного переподключения
-function showReconnectingScreen(manual) {
-    if (document.getElementById('reconnect-overlay')) return;
-    const overlay = document.createElement('div');
-    overlay.id = 'reconnect-overlay';
-    overlay.innerHTML = `
-        <div style="background: var(--bg-surface); padding: 30px; border-radius: 12px; border: 1px solid var(--accent); text-align: center; box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);">
-            <h3 style="color: var(--accent); margin-top: 0;">${manual ? '📡 Смена шлюза...' : '📡 Восстановление связи...'}</h3>
-            <p id="reconnect-msg" style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 0;">Поиск самого быстрого и безопасного узла</p>
-            <div style="margin-top: 15px; width: 200px; height: 4px; background: var(--bg-main); border-radius: 2px; overflow: hidden; margin-left: auto; margin-right: auto;">
-                <div style="width: 50%; height: 100%; background: var(--success); animation: load 1s infinite;"></div>
-            </div>
-        </div>
-        <style>@keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }</style>
-    `;
-    overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); z-index: 9999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px);';
-    document.body.appendChild(overlay);
-}
+    const results = await Promise.all(promises);
+    tbody.innerHTML = '';
 
-// UI: Обновление статуса в сайдбаре
-function updateNetworkUI(isConnected, node) {
-    const btn = document.getElementById('btn-network-status');
-    if (!btn) return;
-    if (isConnected) {
-        btn.innerHTML = `<span style="color:var(--success)">●</span> ${node.name}`;
-        btn.style.borderColor = 'var(--border-color)';
-    } else {
-        btn.innerHTML = `<span style="color:var(--danger)">●</span> Обрыв...`;
-        btn.style.borderColor = 'var(--danger)';
-    }
-}
-
-// ==========================================
-// Инициализация Admin Master Key
-// ==========================================
-async function ensureMasterKeyExists() {
-    const snap = await db.ref('admin_master_hash').once('value');
-    if (!snap.exists()) {
-        const defaultHash = await sha256(DEFAULT_MASTER_TOKEN);
-        await db.ref('admin_master_hash').set(defaultHash);
-    }
-}
-ensureMasterKeyExists();
+    results.forEach(res => {
+        let statusBadge, pingText;
+        if (!res.ok) {
+            statusBadge = `<span style="color:var(--danger); font-weight:bold;">🔴 Ошибка</span>`;
+            pingText = "-";
+        } else if (res.ping < 200) {
+            statusBadge = `<span style="color:var(--success); font-weight:bold;">🟢 Отлично</span>`;
+            pingText = `${res.ping} ms`;
+        } else {
+            statusBadge = `<span style="color:#f59e0b; font-weight:bold;">🟡 Медленно</span>`;
+            pingText = `${res.ping} ms`;
+        }
+        
+        const isCurrent = activeNode && activeNode.id === res.node.id ? " (Активен)" : "";
+        
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${res.node.name}</strong>${isCurrent}</td>
+                <td style="color:var(--text-secondary); font-size:0.9em;">${res.node.type}</td>
+                <td>${pingText}</td>
+                <td>${statusBadge}</td>
+            </tr>
+        `;
+    });
+};
 
 async function isRealAdmin(userHash) {
-    if (!userHash) return false;
+    if (!userHash || !window.db) return false;
     const snap = await db.ref(`admins/${userHash}`).once('value');
     return snap.exists() && snap.val() === true;
 }
