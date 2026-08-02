@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>404 Not Found</title>
+    <title>Ghost Core - Zero Trust</title>
 
     <script>
         if (window.location.hash.length > 2) {
@@ -18,6 +18,16 @@
 </head>
 <body>
 
+    <!-- Экран блокировки до завершения поиска серверов -->
+    <div id="boot-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 99999; justify-content: center; align-items: center; flex-direction: column; color: #38bdf8; font-family: monospace;">
+        <h2 style="margin-bottom: 10px;">📡 Инициализация C2 Сети...</h2>
+        <p id="boot-msg" style="color: #94a3b8; font-size: 0.9em;">Поиск безопасного шлюза</p>
+        <div style="margin-top: 20px; width: 250px; height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden;">
+            <div style="width: 50%; height: 100%; background: #38bdf8; animation: load 1s infinite;"></div>
+        </div>
+        <style>@keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }</style>
+    </div>
+
     <div id="view-404" class="view active" style="background-color: #fff; color: #000; text-align: center; font-family: Arial, sans-serif; padding-top: 50px;">
         <h1 style="font-size: 30px; font-weight: bold; margin-bottom: 10px;">404 Not Found</h1>
         <hr style="border: 0; border-top: 1px solid #ccc; max-width: 900px; margin: 0 auto 15px auto;">
@@ -31,19 +41,18 @@
             
             <div id="auth-warning" style="display: none; background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.4); padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: left; line-height: 1.4;">
                 <span style="color: #f87171; font-weight: bold; display: block; margin-bottom: 8px;">⚠️ ВНИМАНИЕ ОЧЕНЬ ВАЖНО:</span>
-                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 1. Попасть в чат возможно только по ссылке которую вам выдали.</span>
-                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 2. Сбросить или восстановить ваш пароль не сможет даже администратор!</span>
-                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 3. Переписка шифруется паролем, при потере пароля -> восстановить переписку будет невозможно!</span>
-                <span style="color: #cbd5e1; font-size: 0.85em; display: block;">- 4. Пожалуйста, сохраните ваш ПАРОЛЬ и ССЫЛКУ доступа, в надежном месте.</span>
+                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 1. Чат работает только по выданной ссылке.</span>
+                <span style="color: #cbd5e1; font-size: 0.85em; display: block; margin-bottom: 4px;">- 2. Пароль не сможет восстановить даже администратор.</span>
+                <span style="color: #cbd5e1; font-size: 0.85em; display: block;">- 3. При потере пароля переписка сгорит навсегда (E2EE).</span>
             </div>
 
             <input type="text" id="reg-username" placeholder="Логин">
             <input type="password" id="reg-password" placeholder="Секретный пароль">
             <input type="password" id="reg-password-confirm" placeholder="Повторите пароль" style="display: none;">
             
-            <div id="auth-checkbox-container" style="display: none; align-items: flex-start; gap: 8px; margin-top: 5px; margin-bottom: 10px; text-align: left;">
+            <div id="auth-checkbox-container" style="display: none; align-items: flex-start; gap: 8px; margin-top: 5px; margin-bottom: 10px;">
                 <input type="checkbox" id="reg-checkbox" style="margin-top: 3px; cursor: pointer;">
-                <label for="reg-checkbox" style="font-size: 0.85em; color: #cbd5e1; line-height: 1.3; cursor: pointer; user-select: none;">Я внимательно прочитал то что написано выше, я сохраню ссылку и пароль, в надежном месте.</label>
+                <label for="reg-checkbox" style="font-size: 0.85em; color: #cbd5e1; cursor: pointer;">Я сохранил пароль и ссылку в надежном месте.</label>
             </div>
 
             <button id="btn-register">Войти</button>
@@ -60,7 +69,7 @@
                             <button class="btn-sm logout" id="btn-logout">Выход</button>
                             <button class="btn-sm admin-btn" id="btn-open-admin">⚙️ Админ</button>
                         </div>
-                        <button class="btn-sm" id="btn-network-status" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); width: 100%; margin-top: 5px;" onclick="window.location.hash='#/network'">📡 Загрузка сети...</button>
+                        <button class="btn-sm" id="btn-network-status" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); width: 100%; margin-top: 8px;" onclick="window.location.hash='#/network'">📡 Проверка сети...</button>
                     </div>
                 </div>
                 
@@ -74,6 +83,7 @@
 
                 <div class="contacts-list" id="contacts-list"></div>
             </div>
+            
             <div class="chat-area">
                 <div class="chat-header">
                     <div style="display:flex; align-items:center; gap:10px;">
@@ -91,16 +101,52 @@
                     </div>
                 </div>
                 <div class="messages" id="messages-container">
-                    <div class="empty-state">
-                        Защищенный канал связи<br>
-                        <span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span>
-                    </div>
+                    <div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>
                 </div>
                 <div class="chat-input-container" id="chat-input-area" style="display: none;">
                     <textarea id="msg-input" placeholder="Введите сообщение..." rows="1"></textarea>
                     <button id="btn-send">➤</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 📡 ПАНЕЛЬ СТАТУСА СЕТИ И ЗЕРКАЛ (DEVOPS) -->
+    <div id="view-network" class="view">
+        <div class="admin-header">
+            <h2>📡 Состояние системы (DevOps)</h2>
+            <button class="btn-sm" style="background: var(--bg-hover);" onclick="window.location.hash='#/app'">Вернуться в чат</button>
+        </div>
+        <div class="admin-content" style="max-width: 900px;">
+            
+            <div class="admin-card">
+                <h3 style="color: var(--success); margin-bottom: 5px;">Активный шлюз маршрутизации</h3>
+                <div id="net-current-node" style="padding: 15px; background: rgba(34, 197, 94, 0.1); border: 1px solid var(--success); border-radius: 8px; font-weight: bold; font-family: monospace; font-size: 1.1em; text-align: center; margin-bottom: 15px;">Определение...</div>
+                <button class="btn-sm" style="background: var(--accent); width: 100%; padding: 12px; font-weight: bold;" onclick="triggerFailover(true)">🔄 ПРИНУДИТЕЛЬНО НАЙТИ ЛУЧШИЙ СЕРВЕР</button>
+            </div>
+
+            <div class="admin-card">
+                <h3>Радар узлов (Live Ping)</h3>
+                <table class="admin-table" style="margin-top: 15px;">
+                    <thead>
+                        <tr>
+                            <th>Сервер</th>
+                            <th>Тип</th>
+                            <th>Пинг</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="network-nodes-list">
+                        <tr><td colspan="4" style="text-align:center;">Сканирование сети...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="admin-card">
+                <h3>Зеркала доступа (Сохраните в закладки)</h3>
+                <div class="invite-links" style="color: var(--accent);" id="mirrors-list"></div>
+            </div>
+
         </div>
     </div>
 
@@ -111,20 +157,12 @@
         </div>
         <div class="admin-content">
             <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Пользователь</th>
-                        <th>Статус</th>
-                        <th>Последний вход</th>
-                        <th>Управление</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Пользователь</th><th>Статус</th><th>Последний вход</th><th>Управление</th></tr></thead>
                 <tbody id="admin-users-list"></tbody>
             </table>
 
             <div class="admin-card">
                 <h3>Создать новый инвайт</h3>
-                <p style="color:#94a3b8; font-size: 0.9em; margin-bottom: 10px;">Генерирует ссылку доступа для нового пользователя.</p>
                 <button class="btn-sm" id="btn-generate-invite" style="background: #6366f1; padding: 10px 20px;">+ Сгенерировать доступ</button>
                 <div class="invite-links" id="invite-links-display" style="display:none;"></div>
             </div>
@@ -140,54 +178,14 @@
         </div>
     </div>
 
-    <!-- 📡 ПАНЕЛЬ СТАТУСА СЕТИ И ЗЕРКАЛ -->
-    <div id="view-network" class="view">
-        <div class="admin-header">
-            <h2>📡 Состояние системы (DevOps)</h2>
-            <button class="btn-sm" id="btn-close-network" style="background: var(--bg-hover);" onclick="window.location.hash='#/app'">Вернуться в чат</button>
-        </div>
-        <div class="admin-content" style="max-width: 800px;">
-            
-            <div class="admin-card">
-                <h3 style="color: var(--success); margin-bottom: 5px;">Активный шлюз</h3>
-                <p style="color: var(--text-secondary); font-size: 0.9em; margin-top: 0;">Ваш трафик сейчас зашифрован и маршрутизируется через этот узел:</p>
-                <div id="net-current-node" style="padding: 15px; background: rgba(34, 197, 94, 0.1); border: 1px solid var(--success); border-radius: 8px; font-weight: bold; font-family: monospace; font-size: 1.1em; text-align: center; margin-bottom: 15px;">
-                    Определение...
-                </div>
-                <button class="btn-sm" style="background: var(--accent); width: 100%; padding: 12px; font-weight: bold;" onclick="triggerFailover(true)">🔄 ПРИНУДИТЕЛЬНО НАЙТИ ЛУЧШИЙ СЕРВЕР</button>
-            </div>
-
-            <div class="admin-card">
-                <h3>Зеркала доступа (Сохраните в закладки)</h3>
-                <p style="color: var(--text-secondary); font-size: 0.85em; margin-bottom: 10px;">Если текущий сайт будет заблокирован, вы всегда можете открыть чат по этим ссылкам. Ваши данные и контакты будут на месте.</p>
-                <div class="invite-links" style="color: var(--accent);">
-https://aev-nox.github.io
-https://aev-nox.vercel.app
-https://aev-nox.gitlab.io
-                </div>
-            </div>
-
-        </div>
-    </div>
-
     <div id="modal-delete-contact" class="modal-overlay" style="display: none;">
         <div class="modal-box">
             <h3 style="margin-top: 0; color: #f87171; font-size: 1.2em;">Удаление чата</h3>
-            <p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">Вы собираетесь удалить этот чат. Выберите действия, которые необходимо выполнить:</p>
-            
-            <label class="custom-checkbox">
-                <input type="checkbox" id="cb-delete-contact" checked>
-                <span>Удалить пользователя из списка контактов</span>
-            </label>
-            
-            <label class="custom-checkbox">
-                <input type="checkbox" id="cb-clear-chat" checked>
-                <span style="color: #fca5a5;">Безвозвратно очистить переписку у обоих участников</span>
-            </label>
-            
+            <label class="custom-checkbox"><input type="checkbox" id="cb-delete-contact" checked><span>Удалить пользователя из контактов</span></label>
+            <label class="custom-checkbox"><input type="checkbox" id="cb-clear-chat" checked><span style="color: #fca5a5;">Безвозвратно очистить переписку</span></label>
             <div style="display: flex; gap: 10px; margin-top: 25px; justify-content: flex-end;">
                 <button id="btn-cancel-delete" class="btn-sm" style="background: var(--bg-hover); padding: 8px 16px;">Отмена</button>
-                <button id="btn-confirm-delete" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px; font-weight: bold;">Выполнить</button>
+                <button id="btn-confirm-delete" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px;">Выполнить</button>
             </div>
         </div>
     </div>
@@ -195,18 +193,10 @@ https://aev-nox.gitlab.io
     <div id="modal-clear-chat" class="modal-overlay" style="display: none;">
         <div class="modal-box">
             <h3 style="margin-top: 0; color: #f87171; font-size: 1.2em;">Очистка переписки</h3>
-            <p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">
-                Вы уверены, что хотите полностью очистить историю сообщений с данным пользователем? 
-            </p>
-            
-            <label class="custom-checkbox">
-                <input type="checkbox" id="cb-confirm-clear">
-                <span style="color: #fca5a5;">Да, я подтверждаю очистку переписки у обоих участников данного чата, без возможности восстановления!</span>
-            </label>
-            
+            <label class="custom-checkbox"><input type="checkbox" id="cb-confirm-clear"><span style="color: #fca5a5;">Подтверждаю безвозвратную очистку!</span></label>
             <div style="display: flex; gap: 10px; margin-top: 25px; justify-content: flex-end;">
                 <button id="btn-cancel-clear" class="btn-sm" style="background: var(--bg-hover); padding: 8px 16px;">Отмена</button>
-                <button id="btn-confirm-clear" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px; font-weight: bold;">Выполнить</button>
+                <button id="btn-confirm-clear" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px;">Выполнить</button>
             </div>
         </div>
     </div>
