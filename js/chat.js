@@ -10,6 +10,7 @@ async function listenUnreadForContact(peerHash) {
         db.ref(`rooms/${unreadListeners[peerHash]}/messages`).off();
     }
     unreadListeners[peerHash] = roomId;
+
     const readKey = `ghost_read_${roomId}`;
     
     db.ref(`rooms/${roomId}/messages`).limitToLast(1).on('child_added', (snap) => {
@@ -65,13 +66,14 @@ async function initDashboard() {
             window.location.hash = ''; window.location.reload();
             return;
         }
+
         const userData = snap.val();
         if (userData.isBanned) {
             alert("⛔ Ваш аккаунт заблокирован!");
             localStorage.removeItem('ghost_session');
             window.location.hash = ''; window.location.reload();
         } else if (!userData.ph) {
-            alert("⚠️ Администратор сбросил ваши ключи. Требуется переавторизация.");
+            alert("⚠️ Администратор сбросил ваши ключи безопасности. Требуется повторная авторизация.");
             localStorage.removeItem('ghost_session');
             window.location.hash = ''; window.location.reload();
         }
@@ -92,7 +94,9 @@ async function initDashboard() {
 
     db.ref(`users/${mySession.u}/contacts`).on('value', (snap) => {
         myContactHashes.clear();
-        snap.forEach(c => myContactHashes.add(c.key));
+        snap.forEach(c => {
+            myContactHashes.add(c.key);
+        });
         renderContacts();
     });
 
@@ -104,8 +108,9 @@ async function initDashboard() {
     function renderContacts() {
         const list = document.getElementById('contacts-list');
         list.innerHTML = '';
+        
         if (myContactHashes.size === 0) {
-            list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 0.85em;">Нет контактов.<br><br>Используйте поиск выше.</div>';
+            list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 0.85em; line-height: 1.5;">У вас пока нет контактов.<br><br>Используйте поиск выше, чтобы найти друга по нику.</div>';
             return;
         }
         
@@ -117,6 +122,7 @@ async function initDashboard() {
             const div = document.createElement('div');
             div.className = 'contact-item';
             div.id = `contact-${hash}`;
+            
             div.innerHTML = `
                 <div class="status-dot" id="status-${hash}"></div>
                 <div style="flex:1; min-width: 0; display: flex; flex-direction: column;">
@@ -126,12 +132,14 @@ async function initDashboard() {
                     </div>
                     <div class="last-seen">Был: ${formatTime(data.lastSeen)}</div>
                 </div>
-                <button class="btn-sm" style="background: transparent; border: 1px solid var(--border-color); color: var(--danger); padding: 4px 8px; font-size: 0.8em;" onclick="event.stopPropagation(); deleteContact('${hash}')">❌</button>
+                <button class="btn-sm" style="background: transparent; border: 1px solid var(--border-color); color: var(--danger); padding: 4px 8px; font-size: 0.8em;" onclick="event.stopPropagation(); deleteContact('${hash}')" title="Удалить контакт">❌</button>
             `;
             div.onclick = () => openChat(hash, name);
             list.appendChild(div);
+
             listenUnreadForContact(hash);
         });
+        
         db.ref('presence').once('value').then(snap => updatePresenceUI(snap));
     }
 
@@ -162,23 +170,27 @@ if (searchBtn) {
         resDiv.style.color = "var(--text-secondary)";
         
         const snap = await db.ref('users').once('value');
-        let foundHash = null, foundName = null;
+        let foundHash = null;
+        let foundName = null;
         
         snap.forEach(child => {
             if (child.key === mySession.u) return;
             const data = child.val();
             if (data && data.n && !data.isBanned) {
                 if (decodeBase64(data.n).toLowerCase() === query.toLowerCase()) {
-                    foundHash = child.key; foundName = decodeBase64(data.n);
+                    foundHash = child.key;
+                    foundName = decodeBase64(data.n);
                 }
             }
         });
         
         if (foundHash) {
-            resDiv.innerHTML = `<span style="color:var(--success)">✅ Найден!</span><br>
-                <button class="btn-sm" style="margin-top:8px; background:var(--success); color:#000; font-weight:bold; width: 100%;" onclick="addContact('${foundHash}', '${escapeHTML(foundName)}')">Написать</button>`;
+            resDiv.innerHTML = `
+                <span style="color:var(--success)">✅ Пользователь найден!</span><br>
+                <button class="btn-sm" style="margin-top:8px; background:var(--success); color:#000; font-weight:bold; width: 100%;" onclick="addContact('${foundHash}', '${escapeHTML(foundName)}')">Добавить и написать</button>
+            `;
         } else {
-            resDiv.innerHTML = `<span style="color:var(--danger)">❌ Не найден</span>`;
+            resDiv.innerHTML = `<span style="color:var(--danger)">❌ Пожалуйста, уточните ник пользователя</span>`;
         }
     });
 }
@@ -186,6 +198,7 @@ if (searchBtn) {
 window.addContact = async function(hash, name) {
     await db.ref(`users/${mySession.u}/contacts/${hash}`).set(Date.now());
     await db.ref(`users/${hash}/contacts/${mySession.u}`).set(Date.now());
+    
     document.getElementById('search-input').value = '';
     document.getElementById('search-result').innerHTML = '';
     openChat(hash, name);
@@ -200,11 +213,15 @@ window.deleteContact = function(peerHash) {
     document.getElementById('modal-delete-contact').style.display = 'flex';
 };
 
+// 🔥 ПАТЧ ОТ БАГОВ: Жесткий контроль слушателей Firebase
 let currentRoomId = null, currentRoomKey = null;
-let currentMessagesCallback = null, currentTtlCallback = null, currentMessagesValueCallback = null;
+let currentMessagesCallback = null;
+let currentTtlCallback = null;
+let currentMessagesValueCallback = null;
 
 async function openChat(peerHash, peerName) {
     document.querySelector('.dashboard').classList.add('mobile-chat-active');
+
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
     const targetContact = document.getElementById(`contact-${peerHash}`);
     if (targetContact) {
@@ -220,6 +237,7 @@ async function openChat(peerHash, peerName) {
     document.getElementById('crypto-badge').style.display = 'none';
     document.getElementById('chat-controls').style.display = 'none';
 
+    // 🔥 ПАТЧ: Отключаем только конкретные колбэки текущего чата, не ломая фоновые процессы!
     if (currentRoomId) {
         if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
         if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
@@ -228,7 +246,8 @@ async function openChat(peerHash, peerName) {
 
     const hashes = [mySession.u, peerHash].sort();
     currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
-    currentRoomKey = null;
+    currentRoomKey = null; // Сбрасываем ключ для нового чата
+
     localStorage.setItem(`ghost_read_${currentRoomId}`, Date.now());
 
     if (window.currentPeerPkRef) window.currentPeerPkRef.off();
@@ -237,27 +256,36 @@ async function openChat(peerHash, peerName) {
     window.currentPeerPkRef.on('value', async (snap) => {
         const peerPubJwk = snap.val();
         if (!peerPubJwk) {
-            msgsContainer.innerHTML = '<div class="empty-state">Ожидание ключей шифрования пользователя...</div>';
+            msgsContainer.innerHTML = '<div class="empty-state">У пользователя сброшены ключи шифрования.</div>';
+            document.getElementById('chat-input-area').style.display = 'none';
+            document.getElementById('crypto-badge').style.display = 'none';
+            document.getElementById('chat-controls').style.display = 'none';
             return;
         }
+
         try {
             const peerPubKey = await crypto.subtle.importKey("jwk", peerPubJwk, {name: "ECDH", namedCurve: "P-256"}, true, []);
             const myPrivKey = await crypto.subtle.importKey("jwk", mySession.priv, {name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
+
             currentRoomKey = await crypto.subtle.deriveKey(
-                {name: "ECDH", public: peerPubKey}, myPrivKey,
-                {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]
+                {name: "ECDH", public: peerPubKey},
+                myPrivKey,
+                {name: "AES-GCM", length: 256},
+                false,
+                ["encrypt", "decrypt"]
             );
-            msgsContainer.innerHTML = ''; // Убираем сообщение "Ожидание ключей"
+
             document.getElementById('chat-input-area').style.display = 'flex';
             document.getElementById('crypto-badge').style.display = 'inline-block';
             document.getElementById('chat-controls').style.display = 'flex';
         } catch (e) {
-            console.error("Ошибка ключа ECDH:", e);
+            console.error("Ошибка обновления ключа ECDH", e);
         }
     });
 
     currentTtlCallback = db.ref(`rooms/${currentRoomId}/ttl`).on('value', (snap) => {
-        document.getElementById('auto-clean-select').value = snap.val() || "0";
+        const ttl = snap.val() || "0";
+        document.getElementById('auto-clean-select').value = ttl;
     });
 
     currentMessagesCallback = db.ref(`rooms/${currentRoomId}/messages`).on('child_added', async (snapMsg) => {
@@ -277,14 +305,14 @@ async function openChat(peerHash, peerName) {
             return;
         }
 
-        // ИСПРАВЛЕНИЕ: Ждем скачивания ключа до 10 секунд (защита от скачков сети)
+        // 🔥 ПАТЧ: Ожидание ключа. Защита от гонки процессов на слабых телефонах!
         let attempts = 0;
-        while (!currentRoomKey && attempts < 100 && currentRoomId === msgRoomId) {
-            await new Promise(r => setTimeout(r, 100)); 
+        while (!currentRoomKey && attempts < 50 && currentRoomId === msgRoomId) {
+            await new Promise(r => setTimeout(r, 50)); 
             attempts++;
         }
 
-        let decryptedText = "[Ошибка: Ключ не установлен (сеть)]";
+        let decryptedText = "[Ошибка дешифровки]";
         if (currentRoomKey) {
             try {
                 const str = atob(msg.d);
@@ -292,7 +320,7 @@ async function openChat(peerHash, peerName) {
                 for(let i=0; i<str.length; i++) combined[i] = str.charCodeAt(i);
                 const decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: combined.slice(0, 12)}, currentRoomKey, combined.slice(12));
                 decryptedText = new TextDecoder().decode(decrypted);
-            } catch(e) { decryptedText = "[Ошибка дешифровки]"; }
+            } catch(e) {}
         }
 
         const isMe = msg.s === mySession.u;
@@ -300,11 +328,19 @@ async function openChat(peerHash, peerName) {
 
         const div = document.createElement('div');
         div.className = `msg ${isMe ? 'you' : 'peer'}`;
-        div.innerHTML = `<div class="msg-text">${escapeHTML(decryptedText)}</div><div class="msg-footer"><span class="msg-time">${msgTime}</span></div>`;
+        div.innerHTML = `
+            <div class="msg-text">${escapeHTML(decryptedText)}</div>
+            <div class="msg-footer">
+                <span class="msg-time">${msgTime}</span>
+            </div>
+        `;
         
         msgsContainer.appendChild(div);
+        
         clearTimeout(window.chatScrollTimeout);
-        window.chatScrollTimeout = setTimeout(() => { msgsContainer.scrollTop = msgsContainer.scrollHeight; }, 50);
+        window.chatScrollTimeout = setTimeout(() => {
+            msgsContainer.scrollTop = msgsContainer.scrollHeight;
+        }, 50);
     });
 
     currentMessagesValueCallback = db.ref(`rooms/${currentRoomId}/messages`).on('value', (snap) => {
@@ -316,12 +352,14 @@ const backBtn = document.getElementById('btn-mobile-back');
 if (backBtn) {
     backBtn.addEventListener('click', () => {
         document.querySelector('.dashboard').classList.remove('mobile-chat-active');
+        // 🔥 ПАТЧ: Аккуратно отключаем слушатели при выходе из чата
         if (currentRoomId) {
             if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
             if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
             if (currentTtlCallback) db.ref(`rooms/${currentRoomId}/ttl`).off('value', currentTtlCallback);
         }
-        currentRoomId = null; currentRoomKey = null;
+        currentRoomId = null;
+        currentRoomKey = null;
         document.getElementById('chat-header-name').textContent = "Выберите чат";
         document.getElementById('messages-container').innerHTML = '<div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>';
         document.getElementById('chat-input-area').style.display = 'none';
@@ -331,46 +369,64 @@ if (backBtn) {
 }
 
 document.getElementById('auto-clean-select').addEventListener('change', async (e) => {
-    if (currentRoomId) await db.ref(`rooms/${currentRoomId}/ttl`).set(e.target.value);
+    if (!currentRoomId) return;
+    const val = e.target.value;
+    await db.ref(`rooms/${currentRoomId}/ttl`).set(val);
 });
 
+// 🔥 ПАТЧ: Новая логика корзины (модальное окно вместо встроенного confirm)
 document.getElementById('btn-clear-chat').addEventListener('click', () => {
     if (!currentRoomId) return;
     document.getElementById('cb-confirm-clear').checked = false;
     document.getElementById('modal-clear-chat').style.display = 'flex';
 });
 
-document.getElementById('btn-cancel-clear').addEventListener('click', () => document.getElementById('modal-clear-chat').style.display = 'none');
+document.getElementById('btn-cancel-clear').addEventListener('click', () => {
+    document.getElementById('modal-clear-chat').style.display = 'none';
+});
 
 document.getElementById('btn-confirm-clear').addEventListener('click', async () => {
     if (!currentRoomId) return;
-    if (!document.getElementById('cb-confirm-clear').checked) return alert("❌ Подтвердите очистку!");
+    
+    const isChecked = document.getElementById('cb-confirm-clear').checked;
+    if (!isChecked) {
+        alert("❌ Пожалуйста, подтвердите очистку, поставив галочку.");
+        return;
+    }
+    
     await db.ref(`rooms/${currentRoomId}/messages`).remove();
     document.getElementById('modal-clear-chat').style.display = 'none';
 });
 
 const msgInput = document.getElementById('msg-input');
+
 msgInput.addEventListener('input', function() {
     this.style.height = 'auto'; 
     this.style.height = (this.scrollHeight) + 'px'; 
     if (this.value === '') this.style.height = 'auto'; 
 });
+
 msgInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('btn-send').click(); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('btn-send').click();
+    }
 });
 
 document.getElementById('btn-send').addEventListener('click', async () => {
     const text = msgInput.value.trim();
     if (!text || !currentRoomId || !currentRoomKey) return;
     
-    msgInput.value = ''; msgInput.style.height = 'auto'; 
+    msgInput.value = '';
+    msgInput.style.height = 'auto'; 
 
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, currentRoomKey, enc.encode(text));
     
     const combined = new Uint8Array(12 + encrypted.byteLength);
-    combined.set(iv, 0); combined.set(new Uint8Array(encrypted), 12);
+    combined.set(iv, 0); 
+    combined.set(new Uint8Array(encrypted), 12);
 
     db.ref(`rooms/${currentRoomId}/messages`).push({
         s: mySession.u,
@@ -386,6 +442,7 @@ document.getElementById('btn-cancel-delete').addEventListener('click', () => {
 
 document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
     if (!targetUserToDelete) return;
+    
     const shouldDeleteContact = document.getElementById('cb-delete-contact').checked;
     const shouldClearChat = document.getElementById('cb-clear-chat').checked;
     const peerHash = targetUserToDelete;
@@ -401,9 +458,24 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
     const hashes = [mySession.u, peerHash].sort();
     const targetRoomId = await sha256(hashes[0] + "_" + hashes[1]);
 
-    if (shouldClearChat) await db.ref(`rooms/${targetRoomId}`).remove();
+    if (shouldClearChat) {
+        await db.ref(`rooms/${targetRoomId}`).remove();
+    }
 
     if ((shouldDeleteContact || shouldClearChat) && currentRoomId === targetRoomId) {
-        document.getElementById('btn-mobile-back').click();
+        document.querySelector('.dashboard').classList.remove('mobile-chat-active');
+        
+        // 🔥 ПАТЧ: Аккуратное отключение и тут тоже
+        if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
+        if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
+        if (currentTtlCallback) db.ref(`rooms/${currentRoomId}/ttl`).off('value', currentTtlCallback);
+        
+        currentRoomId = null;
+        currentRoomKey = null;
+        document.getElementById('chat-header-name').textContent = "Выберите чат";
+        document.getElementById('messages-container').innerHTML = '<div class="empty-state">Защищенный канал связи<br><span style="font-size:0.75em; opacity: 0.6;">(End-to-End Encryption)</span></div>';
+        document.getElementById('chat-input-area').style.display = 'none';
+        document.getElementById('crypto-badge').style.display = 'none';
+        document.getElementById('chat-controls').style.display = 'none';
     }
 });
