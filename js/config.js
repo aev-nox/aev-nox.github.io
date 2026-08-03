@@ -1,23 +1,24 @@
 // Конфигурации прокси-узлов (Canary Release Pattern)
+// 🔥 ПАТЧ: Жестко привязываем namespace (?ns=) к кастомным прокси-доменам, 
+// чтобы Firebase SDK понимал, к какой БД обращаться, и не выдавал 404.
 const PROXY_CONFIGS = {
     "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
-    "deno": "https://edge-deno.aev-nox.deno.net",
-    "vercel": "https://ed-ge-vercel.vercel.app",
-    "netlify": "https://edge-netlify.netlify.app",
-    "cloudflare": "https://edge-flare.zuq.workers.dev"
+    "deno": "https://edge-deno.aev-nox.deno.net/?ns=global-student-project-default-rtdb",
+    "vercel": "https://ed-ge-vercel.vercel.app/?ns=global-student-project-default-rtdb",
+    "netlify": "https://edge-netlify.netlify.app/?ns=global-student-project-default-rtdb",
+    "cloudflare": "https://edge-flare.zuq.workers.dev/?ns=global-student-project-default-rtdb"
 };
 
 // Читаем выбранный узел из памяти (по умолчанию - прямой коннект)
 const activeProxy = localStorage.getItem('ghost_db_proxy') || 'direct';
 const targetDatabaseURL = PROXY_CONFIGS[activeProxy] || PROXY_CONFIGS['direct'];
 
-// 🔥 АПДЕЙТ: ПРИНУДИТЕЛЬНЫЙ HTTP LONG POLLING ДЛЯ ПРОКСИ 🔥
+// 🔥 ПРИНУДИТЕЛЬНЫЙ HTTP LONG POLLING ДЛЯ ПРОКСИ
 // Чтобы Vercel/Netlify/Cloudflare не обрывали соединение по таймауту сокета,
-// мы "прячем" поддержку WebSockets от браузера. Firebase SDK увидит это 
-// и сам штатно переключится на чистые HTTP GET/POST запросы.
+// мы "прячем" поддержку WebSockets от браузера, переключая транспорт на HTTP GET/POST.
 if (activeProxy !== 'direct') {
     console.warn(`[Ghost Proxy] Узел: ${activeProxy}. WebSockets отключены -> Активирован HTTP Long Polling.`);
-    window.WebSocket = undefined; // Блокируем сокеты
+    window.WebSocket = undefined; 
 } else {
     console.log("[Ghost Proxy] Прямое подключение. Режим WebSockets активен (Max Speed).");
 }
