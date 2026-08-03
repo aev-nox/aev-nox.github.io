@@ -2,7 +2,8 @@ const views = {
     404: document.getElementById('view-404'),
     invite: document.getElementById('view-invite'),
     app: document.getElementById('view-app'),
-    admin: document.getElementById('view-admin')
+    admin: document.getElementById('view-admin'),
+    status: document.getElementById('view-status')
 };
 
 let currentInviteHash = null;
@@ -115,7 +116,7 @@ async function handleRoute() {
         }
     }
 
-    if (mySession && hash !== '#/app' && hash !== '#/admin') { 
+    if (mySession && hash !== '#/app' && hash !== '#/admin' && hash !== '#/status') { 
         window.location.hash = '#/app'; return; 
     }
 
@@ -151,6 +152,12 @@ async function handleRoute() {
             showView('admin'); initAdminPanel(); 
         } else {
             window.location.hash = '#/app';
+        }
+    }
+    else if (hash === '#/status') {
+        showView('status');
+        if (typeof runSystemDiagnostics === 'function') {
+            runSystemDiagnostics();
         }
     }
     else showView('404');
