@@ -11,12 +11,23 @@ const PROXY_CONFIGS = {
 const activeProxy = localStorage.getItem('ghost_db_proxy') || 'direct';
 const targetDatabaseURL = PROXY_CONFIGS[activeProxy] || PROXY_CONFIGS['direct'];
 
+// 🔥 АПДЕЙТ: ПРИНУДИТЕЛЬНЫЙ HTTP LONG POLLING ДЛЯ ПРОКСИ 🔥
+// Чтобы Vercel/Netlify/Cloudflare не обрывали соединение по таймауту сокета,
+// мы "прячем" поддержку WebSockets от браузера. Firebase SDK увидит это 
+// и сам штатно переключится на чистые HTTP GET/POST запросы.
+if (activeProxy !== 'direct') {
+    console.warn(`[Ghost Proxy] Узел: ${activeProxy}. WebSockets отключены -> Активирован HTTP Long Polling.`);
+    window.WebSocket = undefined; // Блокируем сокеты
+} else {
+    console.log("[Ghost Proxy] Прямое подключение. Режим WebSockets активен (Max Speed).");
+}
+
 // Настройка базы и глобальные константы
 const firebaseConfig = {
     apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
     authDomain: "global-student-project.firebaseapp.com",
     projectId: "global-student-project",
-    databaseURL: targetDatabaseURL // 🔥 ДИНАМИЧЕСКИЙ РОУТИНГ
+    databaseURL: targetDatabaseURL
 };
 firebase.initializeApp(firebaseConfig);
 
