@@ -3,7 +3,8 @@ const views = {
     invite: document.getElementById('view-invite'),
     app: document.getElementById('view-app'),
     admin: document.getElementById('view-admin'),
-    status: document.getElementById('view-status')
+    status: document.getElementById('view-status'),
+    proxy: document.getElementById('view-proxy-test')
 };
 
 let currentInviteHash = null;
@@ -92,8 +93,6 @@ async function handleRoute() {
         const masterSnap = await db.ref('admin_master_hash').once('value');
         
         if (masterSnap.exists() && masterSnap.val() === tokenHash) {
-            
-            // 🔥 ПАТЧ ZERO TRUST: Авторизуем само устройство как админское
             try {
                 await db.ref(`admin_uids/${auth.currentUser.uid}`).set(tokenHash);
             } catch (err) {
@@ -116,7 +115,7 @@ async function handleRoute() {
         }
     }
 
-    if (mySession && hash !== '#/app' && hash !== '#/admin' && hash !== '#/status') { 
+    if (mySession && hash !== '#/app' && hash !== '#/admin' && hash !== '#/status' && hash !== '#/proxy') { 
         window.location.hash = '#/app'; return; 
     }
 
@@ -160,10 +159,16 @@ async function handleRoute() {
             runSystemDiagnostics();
         }
     }
+    else if (hash === '#/proxy') {
+        showView('proxy');
+        if (typeof initProxyTester === 'function') {
+            initProxyTester();
+        }
+    }
     else showView('404');
 }
 
-// Запускаем роутер только после того, как устройство получит токен
+// Запускаем роутер только после авторизации устройства
 auth.onAuthStateChanged((user) => {
     if (user) handleRoute();
 });
@@ -177,7 +182,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     const userHash = await sha256(user);
     const passHash = await sha256(userHash + ":" + pass); 
 
-    // ЛОГИКА ДЛЯ УЖЕ ЗАРЕГИСТРИРОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ВХОД ИЛИ СБРОС)
     if (currentInviteData && currentInviteData.userHash) {
         const targetUserHash = currentInviteData.userHash;
         const targetPassHash = await sha256(targetUserHash + ":" + pass);
@@ -220,7 +224,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
         window.location.hash = isAdmin ? '#/admin' : '#/app';
     } 
-    // ЛОГИКА ДЛЯ ПЕРВИЧНОЙ РЕГИСТРАЦИИ (НОВЫЙ АККАУНТ)
     else {
         const isPendingAdmin = sessionStorage.getItem('pending_admin') === 'true';
         if (!currentInviteData && !isPendingAdmin) {
@@ -231,15 +234,15 @@ document.getElementById('btn-register').addEventListener('click', async () => {
         const isChecked = document.getElementById('reg-checkbox').checked;
 
         if (pass !== passConfirm) {
-            return alert("❌ Пароли не совпадают! Пожалуйста, введите одинаковые пароли.");
+            return alert("❌ Пароли не совпадают!");
         }
         if (!isChecked) {
-            return alert("❌ Пожалуйста, подтвердите, что вы сохранили данные (поставьте галочку).");
+            return alert("❌ Подтвердите сохранение данных (галочка).");
         }
 
         const userSnapCheck = await db.ref(`users/${userHash}`).once('value');
         if (userSnapCheck.exists()) {
-            return alert("❌ Этот логин уже занят! Пожалуйста, придумайте другой.");
+            return alert("❌ Этот логин уже занят!");
         }
 
         const keyPair = await crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, true, ["deriveKey", "deriveBits"]);
@@ -248,7 +251,6 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
         const encryptedPrivKey = await encryptPrivateKey(userHash, pass, privJwk);
 
-        // 🔥 ПАТЧ ZERO TRUST: Инъекция owner_uid для соответствия правилу (!data.exists() && newData.child('owner_uid').val() === auth.uid)
         await db.ref(`users/${userHash}`).update({
             n: encodeBase64(user),
             pk: pubJwk,

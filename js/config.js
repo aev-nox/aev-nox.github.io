@@ -1,14 +1,27 @@
+// Конфигурации прокси-узлов (Canary Release Pattern)
+const PROXY_CONFIGS = {
+    "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
+    "deno": "https://edge-deno.aev-nox.deno.net",
+    "vercel": "https://ed-ge-vercel.vercel.app",
+    "netlify": "https://edge-netlify.netlify.app",
+    "cloudflare": "https://edge-flare.zuq.workers.dev"
+};
+
+// Читаем выбранный узел из памяти (по умолчанию - прямой коннект)
+const activeProxy = localStorage.getItem('ghost_db_proxy') || 'direct';
+const targetDatabaseURL = PROXY_CONFIGS[activeProxy] || PROXY_CONFIGS['direct'];
+
 // Настройка базы и глобальные константы
 const firebaseConfig = {
     apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
     authDomain: "global-student-project.firebaseapp.com",
     projectId: "global-student-project",
-    databaseURL: "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app"
+    databaseURL: targetDatabaseURL // 🔥 ДИНАМИЧЕСКИЙ РОУТИНГ
 };
 firebase.initializeApp(firebaseConfig);
 
 const db = firebase.database();
-const auth = firebase.auth(); // 🔥 ДОБАВЛЕНО: Экземпляр авторизации
+const auth = firebase.auth(); // Экземпляр авторизации
 
 const DOMAINS = [
     window.location.origin + window.location.pathname,

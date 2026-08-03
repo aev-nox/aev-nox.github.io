@@ -58,6 +58,7 @@
                         <div id="my-name-display">Загрузка...</div>
                         <div class="btn-group">
                             <button class="btn-sm logout" id="btn-logout">Выход</button>
+                            <button class="btn-sm" id="btn-open-proxy" style="background: #8b5cf6; color: #fff; font-weight: bold;">🔀 Proxy</button>
                             <button class="btn-sm" id="btn-open-status" style="background: #10b981; color: #000; font-weight: bold;">📊 Статус</button>
                             <button class="btn-sm admin-btn" id="btn-open-admin">⚙️ Админ</button>
                         </div>
@@ -100,6 +101,28 @@
                     <textarea id="msg-input" placeholder="Введите сообщение..." rows="1"></textarea>
                     <button id="btn-send">➤</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-proxy-test" class="view" style="overflow-y: auto;">
+        <div class="admin-header">
+            <h2 style="color: #8b5cf6;">🔀 DB Proxy Tester</h2>
+            <button class="btn-sm" id="btn-close-proxy" style="background: var(--bg-hover);">Вернуться в чат</button>
+        </div>
+        <div class="admin-content" style="max-width: 600px; margin: 0 auto;">
+            <div class="admin-card">
+                <h3 style="margin-top: 0; color: #8b5cf6;">Выбор маршрута к базе данных</h3>
+                <p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">
+                    Выберите узел для тестирования C2 соединения. При смене маршрута приложение будет перезагружено для поднятия новых WebSocket.
+                </p>
+                <div id="proxy-list-container" style="display: flex; flex-direction: column; gap: 10px;">
+                    </div>
+                <button id="btn-apply-proxy" style="margin-top: 25px; width: 100%; padding: 12px; background: #8b5cf6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: opacity 0.2s;">Применить и Перезагрузить</button>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 0.85em; color: #fcd34d; line-height: 1.5;">
+                ⚠️ <strong>Режим Canary:</strong> Если после переключения вы видите ошибки коннекта, база не грузится или сообщения не доходят, вернитесь сюда и выберите базовый маршрут "Direct".
             </div>
         </div>
     </div>
@@ -216,6 +239,7 @@
     <script src="js/crypto.js"></script>
     <script src="js/config.js"></script>
     <script src="js/status.js"></script>
+    <script src="js/proxy.js"></script>
     <script src="js/router.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/admin.js"></script>
