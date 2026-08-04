@@ -1,6 +1,5 @@
 // Конфигурации прокси-узлов (Canary Release Pattern)
-// 🔥 ПАТЧ: Жестко привязываем namespace (?ns=) к кастомным прокси-доменам, 
-// чтобы Firebase SDK понимал, к какой БД обращаться, и не выдавал 404.
+// Жестко привязываем namespace (?ns=) к кастомным прокси-доменам
 const PROXY_CONFIGS = {
     "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
     "deno": "https://edge-deno.aev-nox.deno.net/?ns=global-student-project-default-rtdb",
@@ -12,11 +11,45 @@ const PROXY_CONFIGS = {
 // Читаем выбранный узел из памяти (по умолчанию - прямой коннект)
 const activeProxy = localStorage.getItem('ghost_db_proxy') || 'direct';
 const targetDatabaseURL = PROXY_CONFIGS[activeProxy] || PROXY_CONFIGS['direct'];
+const proxyOrigin = new URL(targetDatabaseURL).origin; // Чистый домен прокси (например, https://edge-flare.zuq.workers.dev)
 
-// 🔥 ПРИНУДИТЕЛЬНЫЙ HTTP LONG POLLING ДЛЯ ПРОКСИ
-// Чтобы Vercel/Netlify/Cloudflare не обрывали соединение по таймауту сокета,
-// мы "прячем" поддержку WebSockets от браузера, переключая транспорт на HTTP GET/POST.
+// 🔥 ZERO TRUST C2: ПЕРЕХВАТЧИК ТРАФИКА И БЛОКИРОВКА СОКЕТОВ
 if (activeProxy !== 'direct') {
+    
+    // 1. Перехват FETCH (Заворачиваем авторизацию Firebase в наш прокси)
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        let req = args[0];
+        let reqUrl = typeof req === 'string' ? req : req?.url;
+        
+        // Перехватываем вызовы к googleapis.com и подменяем на наш Edge Worker
+        if (reqUrl && reqUrl.includes('googleapis.com')) {
+            const urlObj = new URL(reqUrl);
+            const rewrittenUrl = proxyOrigin + urlObj.pathname + urlObj.search;
+            
+            console.warn(`[C2 Intercept] Auth запрос завернут в прокси: -> ${rewrittenUrl}`);
+            
+            if (typeof req === 'string') {
+                args[0] = rewrittenUrl;
+            } else {
+                args[0] = new Request(rewrittenUrl, req);
+            }
+        }
+        return originalFetch.apply(this, args);
+    };
+
+    // 2. Перехват XHR (Для старых методов внутри SDK)
+    const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        if (typeof url === 'string' && url.includes('googleapis.com')) {
+            const urlObj = new URL(url);
+            url = proxyOrigin + urlObj.pathname + urlObj.search;
+            console.warn(`[C2 Intercept] XHR Auth завернут в прокси: -> ${url}`);
+        }
+        return originalOpen.call(this, method, url, ...rest);
+    };
+
+    // 3. Отключение WebSockets для форсирования HTTP Long Polling
     console.warn(`[Ghost Proxy] Узел: ${activeProxy}. WebSockets отключены -> Активирован HTTP Long Polling.`);
     window.WebSocket = undefined; 
 } else {
