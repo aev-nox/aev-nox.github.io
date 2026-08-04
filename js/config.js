@@ -60,7 +60,6 @@ async function startGhostCore(selectedProxy) {
         console.log("[Ghost Proxy] Прямое подключение. Режим WebSockets активен (Max Speed).");
     }
 
-    // Инициализация Firebase
     firebase.initializeApp({
         apiKey: "AIzaSyAzCfA19BfslrhUnFBYOG72Gnd5lm_5YtI",
         authDomain: "global-student-project.firebaseapp.com",
@@ -68,7 +67,6 @@ async function startGhostCore(selectedProxy) {
         databaseURL: targetDatabaseURL
     });
 
-    // Экспортируем глобально, чтобы router.js, chat.js и admin.js смогли их использовать
     window.db = firebase.database();
     window.auth = firebase.auth();
 
@@ -88,15 +86,20 @@ async function startGhostCore(selectedProxy) {
         await window.db.ref('admin_master_hash').set(defaultHash);
     }
 
-    // 🔥 ДИНАМИЧЕСКАЯ ЗАГРУЗКА СКРИПТОВ
-    // Гарантируем, что скрипты загрузятся строго по очереди и только после инициализации БД
-    const appScripts = ['js/status.js', 'js/proxy.js', 'js/router.js', 'js/chat.js', 'js/admin.js'];
+    // 🔥 ПАТЧ: Строгий порядок загрузки скриптов!
+    const appScripts = [
+        'js/status.js', 
+        'js/proxy.js', 
+        'js/chat.js',   // chat.js ДОЛЖЕН быть перед router.js
+        'js/admin.js',
+        'js/router.js' 
+    ];
     
     for (let src of appScripts) {
         await new Promise((resolve, reject) => {
             const s = document.createElement('script');
             s.src = src;
-            s.async = false; // Блокируем гонку скриптов
+            s.async = false; 
             s.onload = resolve;
             s.onerror = reject;
             document.body.appendChild(s);
@@ -104,25 +107,24 @@ async function startGhostCore(selectedProxy) {
     }
 }
 
-
 // ==========================================
 // 🔥 ЛОГИКА GATEKEEPER (ПРИВРАТНИК)
 // ==========================================
 const savedProxy = localStorage.getItem('ghost_db_proxy');
 
 if (savedProxy) {
-    // Если пользователь уже выбирал узел (или он сохранился), стартуем мгновенно
     startGhostCore(savedProxy);
 } else {
-    // Если памяти нет (первый вход) - запускаем радар и UI
     window.addEventListener('DOMContentLoaded', runGatekeeper);
 }
 
-// Замер скорости (С жестким отвалом Гугла через 1500мс)
-async function measureGKping(key, url, isEdge) {
+// 🔥 ПАТЧ: Исправлено склеивание URL (двойные слеши и .json для директа)
+async function measureGKping(key, urlString, isEdge) {
     const start = performance.now();
     try {
-        const targetUrl = isEdge ? `${url}/ghost-ping` : url;
+        const baseUrl = urlString.split('?')[0].replace(/\/$/, ''); // Убираем слеш на конце
+        const targetUrl = isEdge ? `${baseUrl}/ghost-ping` : `${baseUrl}/.json`; // Директ стучится в .json
+        
         const options = isEdge ? { cache: 'no-store' } : { mode: 'no-cors', cache: 'no-store' };
         
         const controller = new AbortController();
@@ -140,7 +142,6 @@ async function measureGKping(key, url, isEdge) {
     }
 }
 
-// Основной интерфейс привратника
 async function runGatekeeper() {
     const modal = document.getElementById('gatekeeper-modal');
     const list = document.getElementById('gk-nodes-list');
@@ -150,13 +151,12 @@ async function runGatekeeper() {
 
     const nodes = [
         { key: 'direct', name: 'Direct (Google Server)', url: PROXY_CONFIGS['direct'], isEdge: false },
-        { key: 'cloudflare', name: 'Cloudflare Edge Proxy', url: PROXY_CONFIGS['cloudflare'].split('?')[0], isEdge: true },
-        { key: 'vercel', name: 'Vercel Edge Proxy', url: PROXY_CONFIGS['vercel'].split('?')[0], isEdge: true },
-        { key: 'netlify', name: 'Netlify Edge Proxy', url: PROXY_CONFIGS['netlify'].split('?')[0], isEdge: true },
-        { key: 'deno', name: 'Deno Edge Proxy', url: PROXY_CONFIGS['deno'].split('?')[0], isEdge: true }
+        { key: 'cloudflare', name: 'Cloudflare Edge Proxy', url: PROXY_CONFIGS['cloudflare'], isEdge: true },
+        { key: 'vercel', name: 'Vercel Edge Proxy', url: PROXY_CONFIGS['vercel'], isEdge: true },
+        { key: 'netlify', name: 'Netlify Edge Proxy', url: PROXY_CONFIGS['netlify'], isEdge: true },
+        { key: 'deno', name: 'Deno Edge Proxy', url: PROXY_CONFIGS['deno'], isEdge: true }
     ];
 
-    // Отрисовываем скелет
     list.innerHTML = nodes.map(n => `
         <label class="node-item" style="cursor: pointer; border: 1px solid var(--border-color); background: var(--bg-surface); padding: 12px; border-radius: 8px; transition: border 0.2s;" id="gk-node-${n.key}">
             <div class="node-name" style="display:flex; align-items:center; gap:10px;">
@@ -168,14 +168,12 @@ async function runGatekeeper() {
         </label>
     `).join('');
 
-    // Подсветка при клике
     const radios = document.querySelectorAll('input[name="gk_proxy"]');
     radios.forEach(r => r.addEventListener('change', () => {
         document.querySelectorAll('label[id^="gk-node-"]').forEach(lbl => lbl.style.borderColor = 'var(--border-color)');
         document.getElementById(`gk-node-${r.value}`).style.borderColor = 'var(--accent)';
     }));
 
-    // Запускаем массовый пинг ко всем узлам
     const promises = nodes.map(n => measureGKping(n.key, n.url, n.isEdge).then(res => {
         const dot = document.getElementById(`gk-dot-${n.key}`);
         const pingText = document.getElementById(`gk-ping-${n.key}`);
@@ -189,17 +187,15 @@ async function runGatekeeper() {
 
     const results = await Promise.all(promises);
     
-    // Автоматический выбор приоритетного узла
     let bestProxy = 'direct';
     const directRes = results.find(r => r.key === 'direct');
     
-    // Если директ мертв — выбираем самый быстрый из прокси
     if (directRes && directRes.status === 'red') {
         const availableEdges = results.filter(r => r.key !== 'direct' && r.status !== 'red').sort((a,b) => a.latency - b.latency);
         if (availableEdges.length > 0) {
             bestProxy = availableEdges[0].key;
         } else {
-            bestProxy = 'cloudflare'; // Резервный фолбэк, если легло вообще всё
+            bestProxy = 'cloudflare';
         }
     }
 
@@ -209,7 +205,6 @@ async function runGatekeeper() {
         targetRadio.dispatchEvent(new Event('change'));
     }
 
-    // Активируем кнопку "Подтвердить"
     btn.style.opacity = '1';
     btn.style.pointerEvents = 'auto';
     btn.textContent = "Подтвердить маршрут";
@@ -219,7 +214,6 @@ async function runGatekeeper() {
         modal.style.opacity = '0';
         setTimeout(() => {
             modal.style.display = 'none';
-            // Передаем управление приложению
             startGhostCore(selected);
         }, 300);
     };
