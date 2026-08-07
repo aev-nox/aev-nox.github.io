@@ -1,5 +1,4 @@
-// Конфигурации прокси-узлов (Canary Release Pattern)
-// 🔥 ИЗМЕНЕНИЕ (Этап 1): const заменены на var
+// Базовые статические конфигурации (Резервный слой)
 var PROXY_CONFIGS = {
     "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
     "deno": "https://edge-deno.aev-nox.deno.net/?ns=global-student-project-default-rtdb",
@@ -16,7 +15,19 @@ var DOMAINS = [
 
 const DEFAULT_MASTER_TOKEN = "INIT-ADMIN-KEY-8f3a9b1c7d2e4f5a";
 
-// 🔥 Функция установки перехватчиков трафика C2
+// 🔥 ПАТЧ: Кэш-перехватчик! Читаем из памяти до запуска ядра, убивая приоритет статики
+try {
+    const cachedGhostConfig = JSON.parse(localStorage.getItem('ghost_system_config'));
+    if (cachedGhostConfig) {
+        if (cachedGhostConfig.PROXY_CONFIGS) window.PROXY_CONFIGS = cachedGhostConfig.PROXY_CONFIGS;
+        if (cachedGhostConfig.DOMAINS) window.DOMAINS = cachedGhostConfig.DOMAINS;
+        if (cachedGhostConfig.PROXY_NAMES) window.PROXY_NAMES = cachedGhostConfig.PROXY_NAMES;
+        if (cachedGhostConfig.RADAR_CONFIG) window.RADAR_CONFIG = cachedGhostConfig.RADAR_CONFIG;
+        console.log("[Ghost Cache] Статика переопределена локальным кэшем браузера!");
+    }
+} catch(e) {}
+
+// Функция установки перехватчиков трафика C2
 function setupInterceptors(proxyOrigin) {
     const originalFetch = window.fetch;
     window.fetch = async function(...args) {
@@ -26,8 +37,6 @@ function setupInterceptors(proxyOrigin) {
         if (reqUrl && reqUrl.includes('googleapis.com')) {
             const urlObj = new URL(reqUrl);
             const rewrittenUrl = proxyOrigin + urlObj.pathname + urlObj.search;
-            console.warn(`[C2 Intercept] Auth запрос завернут в прокси: -> ${rewrittenUrl}`);
-            
             if (typeof req === 'string') args[0] = rewrittenUrl;
             else args[0] = new Request(rewrittenUrl, req);
         }
@@ -39,26 +48,23 @@ function setupInterceptors(proxyOrigin) {
         if (typeof url === 'string' && url.includes('googleapis.com')) {
             const urlObj = new URL(url);
             url = proxyOrigin + urlObj.pathname + urlObj.search;
-            console.warn(`[C2 Intercept] XHR Auth завернут в прокси: -> ${url}`);
         }
         return originalOpen.call(this, method, url, ...rest);
     };
 }
 
-// ==========================================
-// 🔥 ГЛАВНЫЙ ЗАПУСК СИСТЕМЫ (Lazy Init)
-// ==========================================
+// ГЛАВНЫЙ ЗАПУСК СИСТЕМЫ
 async function startGhostCore(selectedProxy) {
     localStorage.setItem('ghost_db_proxy', selectedProxy);
-    const targetDatabaseURL = PROXY_CONFIGS[selectedProxy];
+    const targetDatabaseURL = window.PROXY_CONFIGS[selectedProxy] || PROXY_CONFIGS['direct'];
     const proxyOrigin = new URL(targetDatabaseURL).origin;
 
     if (selectedProxy !== 'direct') {
         setupInterceptors(proxyOrigin);
-        console.warn(`[Ghost Proxy] Узел: ${selectedProxy}. WebSockets отключены -> Активирован HTTP Long Polling.`);
+        console.warn(`[Ghost Proxy] Узел: ${selectedProxy}. WebSockets отключены -> HTTP Long Polling.`);
         window.WebSocket = undefined; 
     } else {
-        console.log("[Ghost Proxy] Прямое подключение. Режим WebSockets активен (Max Speed).");
+        console.log("[Ghost Proxy] Прямое подключение. WebSockets активен.");
     }
 
     firebase.initializeApp({
@@ -71,8 +77,7 @@ async function startGhostCore(selectedProxy) {
     window.db = firebase.database();
     window.auth = firebase.auth();
 
-    // 🔥 ЭТАП 2: ФОНОВЫЙ СЛУШАТЕЛЬ ДИНАМИЧЕСКОЙ КОНФИГУРАЦИИ
-    // Бесшовное переопределение маршрутов в памяти без перезагрузки
+    // 🔥 БЕСШОВНОЕ ПЕРЕОПРЕДЕЛЕНИЕ СЕРВЕРОВ + Запись в память
     window.db.ref('system_config').on('value', snap => {
         const data = snap.val();
         if (data) {
@@ -81,7 +86,9 @@ async function startGhostCore(selectedProxy) {
             if (data.PROXY_NAMES) window.PROXY_NAMES = data.PROXY_NAMES;
             if (data.RADAR_CONFIG) window.RADAR_CONFIG = data.RADAR_CONFIG;
             
-            // Если у пользователя открыт раздел Proxy или Status - мгновенно обновляем UI
+            // Намертво сохраняем в браузер, чтобы пережить F5
+            localStorage.setItem('ghost_system_config', JSON.stringify(data));
+            
             if (window.location.hash === '#/proxy' && typeof initProxyTester === 'function') initProxyTester();
             if (window.location.hash === '#/status' && typeof runSystemDiagnostics === 'function') runSystemDiagnostics();
         }
@@ -103,11 +110,10 @@ async function startGhostCore(selectedProxy) {
         await window.db.ref('admin_master_hash').set(defaultHash);
     }
 
-    // 🔥 ПАТЧ: Строгий порядок загрузки скриптов!
     const appScripts = [
         'js/status.js', 
         'js/proxy.js', 
-        'js/chat.js',   // chat.js ДОЛЖЕН быть перед router.js
+        'js/chat.js',
         'js/admin.js',
         'js/router.js' 
     ];
@@ -124,23 +130,19 @@ async function startGhostCore(selectedProxy) {
     }
 }
 
-// ==========================================
-// 🔥 ЛОГИКА GATEKEEPER (ПРИВРАТНИК)
-// ==========================================
+// ЛОГИКА GATEKEEPER
 const savedProxy = localStorage.getItem('ghost_db_proxy');
-
 if (savedProxy) {
     startGhostCore(savedProxy);
 } else {
     window.addEventListener('DOMContentLoaded', runGatekeeper);
 }
 
-// 🔥 ПАТЧ: Исправлено склеивание URL (двойные слеши и .json для директа)
 async function measureGKping(key, urlString, isEdge) {
     const start = performance.now();
     try {
-        const baseUrl = urlString.split('?')[0].replace(/\/$/, ''); // Убираем слеш на конце
-        const targetUrl = isEdge ? `${baseUrl}/ghost-ping` : `${baseUrl}/.json`; // Директ стучится в .json
+        const baseUrl = urlString.split('?')[0].replace(/\/$/, ''); 
+        const targetUrl = isEdge ? `${baseUrl}/ghost-ping` : `${baseUrl}/.json`;
         
         const options = isEdge ? { cache: 'no-store' } : { mode: 'no-cors', cache: 'no-store' };
         
@@ -166,13 +168,15 @@ async function runGatekeeper() {
     
     modal.style.display = 'flex';
 
-    const nodes = [
-        { key: 'direct', name: 'Direct (Google Server)', url: PROXY_CONFIGS['direct'], isEdge: false },
-        { key: 'cloudflare', name: 'Cloudflare Edge Proxy', url: PROXY_CONFIGS['cloudflare'], isEdge: true },
-        { key: 'vercel', name: 'Vercel Edge Proxy', url: PROXY_CONFIGS['vercel'], isEdge: true },
-        { key: 'netlify', name: 'Netlify Edge Proxy', url: PROXY_CONFIGS['netlify'], isEdge: true },
-        { key: 'deno', name: 'Deno Edge Proxy', url: PROXY_CONFIGS['deno'], isEdge: true }
-    ];
+    // Используем динамические PROXY_CONFIGS и PROXY_NAMES из глобальных переменных
+    const nodes = Object.keys(window.PROXY_CONFIGS).map(key => {
+        return {
+            key: key,
+            name: window.PROXY_NAMES ? (window.PROXY_NAMES[key] || key) : key,
+            url: window.PROXY_CONFIGS[key],
+            isEdge: key !== 'direct'
+        };
+    });
 
     list.innerHTML = nodes.map(n => `
         <label class="node-item" style="cursor: pointer; border: 1px solid var(--border-color); background: var(--bg-surface); padding: 12px; border-radius: 8px; transition: border 0.2s;" id="gk-node-${n.key}">
@@ -212,7 +216,7 @@ async function runGatekeeper() {
         if (availableEdges.length > 0) {
             bestProxy = availableEdges[0].key;
         } else {
-            bestProxy = 'cloudflare';
+            bestProxy = Object.keys(window.PROXY_CONFIGS)[0]; // Fallback to first available
         }
     }
 
