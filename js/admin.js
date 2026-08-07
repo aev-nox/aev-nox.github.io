@@ -116,10 +116,7 @@ window.regenerateUserLink = async function(userHash) {
 
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    
-    // Используем динамический массив доменов из глобальной области видимости
-    const activeDomains = window.DOMAINS || DOMAINS;
-    display.innerHTML = `✅ Новая персональная ссылка пользователя:<br><br>` + activeDomains.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    display.innerHTML = `✅ Новая персональная ссылка пользователя:<br><br>` + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 };
 
 document.getElementById('btn-generate-invite').addEventListener('click', async () => {
@@ -129,10 +126,7 @@ document.getElementById('btn-generate-invite').addEventListener('click', async (
     
     const display = document.getElementById('invite-links-display');
     display.style.display = 'block';
-    
-    // Используем динамический массив доменов из глобальной области видимости
-    const activeDomains = window.DOMAINS || DOMAINS;
-    display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + activeDomains.map(d => `${d}#/inv/${rawToken}`).join('\n');
+    display.innerHTML = "Разошлите одну из этих ссылок:<br><br>" + DOMAINS.map(d => `${d}#/inv/${rawToken}`).join('\n');
 });
 
 document.getElementById('btn-change-master-key').addEventListener('click', async () => {
@@ -148,35 +142,4 @@ document.getElementById('btn-change-master-key').addEventListener('click', async
     document.getElementById('master-key-input').value = '';
 });
 
-// 🔥 Управление динамической конфигурацией серверов
-db.ref('system_config').on('value', snap => {
-    // Если в базе пусто, берем дефолтные значения из кода
-    const data = snap.val() || {
-        PROXY_CONFIGS: window.PROXY_CONFIGS,
-        DOMAINS: window.DOMAINS,
-        PROXY_NAMES: window.PROXY_NAMES,
-        RADAR_CONFIG: window.RADAR_CONFIG
-    };
-    const textarea = document.getElementById('admin-config-json');
-    if (textarea && document.activeElement !== textarea) { 
-        textarea.value = JSON.stringify(data, null, 4);
-    }
-});
-
-document.getElementById('btn-save-config').addEventListener('click', async () => {
-    try {
-        const jsonStr = document.getElementById('admin-config-json').value;
-        const parsed = JSON.parse(jsonStr); 
-        
-        // 🔥 ПАТЧ: Жесткая запись в кэш браузера ДО отправки в базу. Гарантирует приоритет перед статикой.
-        localStorage.setItem('ghost_system_config', JSON.stringify(parsed));
-        
-        await db.ref('system_config').set(parsed);
-        alert("✅ Успешно! Конфигурация серверов обновлена. Если нужно, обновите страницу, чтобы применить изменения.");
-    } catch (e) {
-        alert("❌ Ошибка сохранения! Проверьте правильность синтаксиса JSON.");
-    }
-});
-
-// Роутинг
 handleRoute();
