@@ -1,5 +1,6 @@
 // Конфигурация узлов системы
-const RADAR_CONFIG = {
+// 🔥 ИЗМЕНЕНИЕ: const заменено на var
+var RADAR_CONFIG = {
     frontends: [
         { name: "GitHub Pages", url: "https://aev-nox.github.io" },
         { name: "Vercel UI", url: "https://aev-nox.vercel.app" },

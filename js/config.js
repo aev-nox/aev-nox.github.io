@@ -1,5 +1,6 @@
 // Конфигурации прокси-узлов (Canary Release Pattern)
-const PROXY_CONFIGS = {
+// 🔥 ИЗМЕНЕНИЕ: const заменены на var для возможности переопределения
+var PROXY_CONFIGS = {
     "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
     "deno": "https://edge-deno.aev-nox.deno.net/?ns=global-student-project-default-rtdb",
     "vercel": "https://ed-ge-vercel.vercel.app/?ns=global-student-project-default-rtdb",
@@ -7,7 +8,7 @@ const PROXY_CONFIGS = {
     "cloudflare": "https://edge-flare.zuq.workers.dev/?ns=global-student-project-default-rtdb"
 };
 
-const DOMAINS = [
+var DOMAINS = [
     window.location.origin + window.location.pathname,
     "https://aev-nox.vercel.app/",
     "https://my-secret-domain.com/"
