@@ -75,6 +75,7 @@
 
                 <div class="contacts-list" id="contacts-list"></div>
             </div>
+            
             <div class="chat-area">
                 <div class="chat-header">
                     <div style="display:flex; align-items:center; gap:10px;">
@@ -159,6 +160,16 @@
                     <button class="btn-sm" id="btn-change-master-key" style="background:#f59e0b; color:#000; font-weight:bold;">Обновить</button>
                 </div>
                 <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
+            </div>
+
+            <!-- 🔥 ЭТАП 3: НОВЫЙ БЛОК Управление серверами -->
+            <div class="admin-card">
+                <h3>🌐 Управление серверами (Конфигурация)</h3>
+                <p style="color:#94a3b8; font-size: 0.9em; margin-bottom: 10px;">
+                    Редактирование фронтенд-зеркал и узлов прокси (формат JSON). Внесенные изменения мгновенно применятся у всех пользователей.
+                </p>
+                <textarea id="admin-config-json" style="width:100%; height:300px; background:var(--bg-main); color:var(--success); font-family:monospace; border:1px solid var(--border-color); padding:10px; border-radius:6px; outline:none; resize:vertical;"></textarea>
+                <button class="btn-sm" id="btn-save-config" style="background:#22c55e; color:#000; font-weight:bold; margin-top:10px; padding:10px 20px;">💾 Сохранить в базу</button>
             </div>
         </div>
     </div>

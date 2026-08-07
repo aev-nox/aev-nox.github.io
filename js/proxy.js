@@ -12,7 +12,7 @@ if (btnCloseProxy) {
     };
 }
 
-// 🔥 ИЗМЕНЕНИЕ: const заменено на var
+// 🔥 ИЗМЕНЕНИЕ (Этап 1): const заменено на var
 var PROXY_NAMES = {
     "direct": "Прямое подключение (Firebase Direct)",
     "deno": "Deno Edge Proxy (wss/https)",

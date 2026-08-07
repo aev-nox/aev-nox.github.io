@@ -1,5 +1,5 @@
 // Конфигурация узлов системы
-// 🔥 ИЗМЕНЕНИЕ: const заменено на var
+// 🔥 ИЗМЕНЕНИЕ (Этап 1): const заменено на var
 var RADAR_CONFIG = {
     frontends: [
         { name: "GitHub Pages", url: "https://aev-nox.github.io" },
