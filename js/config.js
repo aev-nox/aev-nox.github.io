@@ -1,5 +1,5 @@
 // Конфигурации прокси-узлов (Canary Release Pattern)
-// 🔥 ИЗМЕНЕНИЕ: const заменены на var для возможности переопределения
+// 🔥 ИЗМЕНЕНИЕ (Этап 1): const заменены на var
 var PROXY_CONFIGS = {
     "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
     "deno": "https://edge-deno.aev-nox.deno.net/?ns=global-student-project-default-rtdb",
@@ -70,6 +70,22 @@ async function startGhostCore(selectedProxy) {
 
     window.db = firebase.database();
     window.auth = firebase.auth();
+
+    // 🔥 ЭТАП 2: ФОНОВЫЙ СЛУШАТЕЛЬ ДИНАМИЧЕСКОЙ КОНФИГУРАЦИИ
+    // Бесшовное переопределение маршрутов в памяти без перезагрузки
+    window.db.ref('system_config').on('value', snap => {
+        const data = snap.val();
+        if (data) {
+            if (data.PROXY_CONFIGS) window.PROXY_CONFIGS = data.PROXY_CONFIGS;
+            if (data.DOMAINS) window.DOMAINS = data.DOMAINS;
+            if (data.PROXY_NAMES) window.PROXY_NAMES = data.PROXY_NAMES;
+            if (data.RADAR_CONFIG) window.RADAR_CONFIG = data.RADAR_CONFIG;
+            
+            // Если у пользователя открыт раздел Proxy или Status - мгновенно обновляем UI
+            if (window.location.hash === '#/proxy' && typeof initProxyTester === 'function') initProxyTester();
+            if (window.location.hash === '#/status' && typeof runSystemDiagnostics === 'function') runSystemDiagnostics();
+        }
+    });
 
     window.auth.signInAnonymously().catch(error => {
         console.error("[-] Ошибка выдачи системного токена устройства:", error);
