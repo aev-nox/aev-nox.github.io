@@ -1,4 +1,4 @@
-// Конфигурации прокси-узлов (Canary Release Pattern)
+// Конфигурации прокси-узлов
 const PROXY_CONFIGS = {
     "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
     "deno": "https://edge-deno.aev-nox.deno.net/?ns=global-student-project-default-rtdb",
@@ -25,8 +25,6 @@ function setupInterceptors(proxyOrigin) {
         if (reqUrl && reqUrl.includes('googleapis.com')) {
             const urlObj = new URL(reqUrl);
             const rewrittenUrl = proxyOrigin + urlObj.pathname + urlObj.search;
-            console.warn(`[C2 Intercept] Auth запрос завернут в прокси: -> ${rewrittenUrl}`);
-            
             if (typeof req === 'string') args[0] = rewrittenUrl;
             else args[0] = new Request(rewrittenUrl, req);
         }
@@ -38,38 +36,22 @@ function setupInterceptors(proxyOrigin) {
         if (typeof url === 'string' && url.includes('googleapis.com')) {
             const urlObj = new URL(url);
             url = proxyOrigin + urlObj.pathname + urlObj.search;
-            console.warn(`[C2 Intercept] XHR Auth завернут в прокси: -> ${url}`);
         }
         return originalOpen.call(this, method, url, ...rest);
     };
 }
 
 // ==========================================
-// 🔥 СИСТЕМА УПРАВЛЕНИЯ СОСТОЯНИЕМ (STATE MACHINE)
-// ==========================================
-let isConnectedToDB = false;
-let hasConnectedOnce = false;
-let coldStartTimer = null;
-let inFlightTimer = null;
-
-function hideSplashScreen() {
-    const splash = document.getElementById('splash-screen');
-    if (splash) {
-        splash.style.opacity = '0';
-        setTimeout(() => splash.style.display = 'none', 300);
-    }
-}
-
-// ==========================================
-// 🔥 ГЛАВНЫЙ ЗАПУСК СИСТЕМЫ 
+// 🔥 ГЛАВНЫЙ ЗАПУСК СИСТЕМЫ С ЖЕЛЕЗНЫМ ТАЙМЕРОМ
 // ==========================================
 async function startGhostCore(selectedProxy) {
+    localStorage.setItem('ghost_db_proxy', selectedProxy);
     const targetDatabaseURL = PROXY_CONFIGS[selectedProxy];
     const proxyOrigin = new URL(targetDatabaseURL).origin;
 
     if (selectedProxy !== 'direct') {
         setupInterceptors(proxyOrigin);
-        console.warn(`[Ghost Proxy] Узел: ${selectedProxy}. WebSockets отключены -> HTTP Long Polling.`);
+        console.warn(`[Ghost Proxy] Узел: ${selectedProxy}. HTTP Long Polling.`);
         window.WebSocket = undefined; 
     }
 
@@ -85,9 +67,29 @@ async function startGhostCore(selectedProxy) {
     window.db = firebase.database();
     window.auth = firebase.auth();
 
-    window.auth.signInAnonymously().catch(error => {
-        console.error("[-] Ошибка выдачи системного токена устройства:", error);
+    // 🛡️ ЖЕЛЕЗНАЯ ЛОГИКА: Таймер запускается ДО любых потенциальных зависаний!
+    let connectionWatchdog = setTimeout(() => {
+        console.error("[-] Прокси-узел не ответил за 6 секунд. Вызов Привратника...");
+        localStorage.removeItem('ghost_db_proxy'); // Удаляем мертвый прокси
+        
+        const modal = document.getElementById('gatekeeper-modal');
+        if(modal) {
+            document.getElementById('gk-title').textContent = "Связь потеряна";
+            document.getElementById('gk-desc').textContent = "Текущий маршрут недоступен. Выберите другой узел для переподключения:";
+            runGatekeeper(); 
+        }
+    }, 6000);
+
+    // Слушаем реальный статус соединения
+    window.db.ref('.info/connected').on('value', (snap) => {
+        if (snap.val() === true) {
+            console.log("[+] Связь с базой успешно установлена.");
+            clearTimeout(connectionWatchdog); // Связь есть - отменяем таймер сброса!
+        }
     });
+
+    // --- Дальше идут асинхронные запросы (они могут зависнуть, но таймер выше нас спасет) ---
+    window.auth.signInAnonymously().catch(error => console.error(error));
 
     window.isRealAdmin = async function(userHash) {
         if (!userHash) return false;
@@ -101,46 +103,11 @@ async function startGhostCore(selectedProxy) {
         await window.db.ref('admin_master_hash').set(defaultHash);
     }
 
-    // 🛡️ СТОРОЖ ХОЛОДНОГО СТАРТА (4 секунды)
-    coldStartTimer = setTimeout(() => {
-        if (!isConnectedToDB) {
-            console.warn("[Watchdog] Холодный старт провален. Вызов Gatekeeper.");
-            hideSplashScreen();
-            localStorage.removeItem('ghost_db_proxy'); // Удаляем нерабочий узел
-            runGatekeeper("Маршрут недоступен", "Текущий узел не отвечает. Пожалуйста, выберите альтернативный маршрут:");
-        }
-    }, 4000);
-
-    // 🛡️ СЛУШАТЕЛЬ КАЧЕСТВА СОЕДИНЕНИЯ FIREBASE
-    window.db.ref('.info/connected').on('value', (snap) => {
-        if (snap.val() === true) {
-            isConnectedToDB = true;
-            hasConnectedOnce = true;
-            clearTimeout(coldStartTimer);
-            clearTimeout(inFlightTimer);
-            hideSplashScreen(); // Связь есть - убираем лоадер
-            console.log("[Firebase] Узел стабилен. Соединение установлено.");
-        } else {
-            isConnectedToDB = false;
-            // Если связь уже была, но пропала - даем 15 сек на восстановление (Защита от "Метро")
-            if (hasConnectedOnce) {
-                console.warn("[Firebase] Обрыв связи. Ожидание 15 секунд...");
-                inFlightTimer = setTimeout(() => {
-                    if (!isConnectedToDB) {
-                        console.error("[Watchdog] Маршрут мертв. Вызов Gatekeeper.");
-                        localStorage.removeItem('ghost_db_proxy');
-                        runGatekeeper("Связь потеряна", "Соединение разорвано. Выберите другой активный узел связи:");
-                    }
-                }, 15000);
-            }
-        }
-    });
-
     // Загрузка остальных скриптов
     const appScripts = ['js/status.js', 'js/proxy.js', 'js/chat.js', 'js/admin.js', 'js/router.js'];
     for (let src of appScripts) {
         await new Promise((resolve, reject) => {
-            if (document.querySelector(`script[src="${src}"]`)) return resolve(); // Защита от дублей
+            if (document.querySelector(`script[src="${src}"]`)) return resolve();
             const s = document.createElement('script');
             s.src = src; s.async = false; s.onload = resolve; s.onerror = reject;
             document.body.appendChild(s);
@@ -152,18 +119,18 @@ async function startGhostCore(selectedProxy) {
 // 🔥 ЛОГИКА GATEKEEPER (ПРИВРАТНИК)
 // ==========================================
 const savedProxy = localStorage.getItem('ghost_db_proxy');
-const isSafeMode = window.location.hash === '#/proxy'; // 🛟 Секретный ручной режим
+const isSafeMode = window.location.hash === '#/proxy'; // Ручной вызов окна
 
 if (savedProxy && !isSafeMode) {
     startGhostCore(savedProxy);
 } else {
-    window.addEventListener('DOMContentLoaded', () => runGatekeeper());
+    window.addEventListener('DOMContentLoaded', runGatekeeper);
 }
 
 async function measureGKping(key, urlString, isEdge) {
     const start = performance.now();
     try {
-        const baseUrl = urlString.split('?')[0].replace(/\/$/, '');
+        const baseUrl = urlString.split('?')[0].replace(/\/$/, ''); 
         const targetUrl = isEdge ? `${baseUrl}/ghost-ping` : `${baseUrl}/.json`;
         const options = isEdge ? { cache: 'no-store' } : { mode: 'no-cors', cache: 'no-store' };
         
@@ -181,19 +148,12 @@ async function measureGKping(key, urlString, isEdge) {
     }
 }
 
-// Функция теперь принимает динамические сообщения для UI
-async function runGatekeeper(title = "Анализ связи", desc = "Выполняется поиск доступного узла для подключения к базе данных...") {
-    hideSplashScreen(); // Прячем Splash, чтобы не перекрывал Gatekeeper
-    
+async function runGatekeeper() {
     const modal = document.getElementById('gatekeeper-modal');
-    document.getElementById('gk-modal-title').textContent = title;
-    document.getElementById('gk-modal-desc').textContent = desc;
-    
     const list = document.getElementById('gk-nodes-list');
     const btn = document.getElementById('btn-gk-confirm');
     
     modal.style.display = 'flex';
-    modal.style.opacity = '1';
 
     const nodes = [
         { key: 'direct', name: 'Direct (Google Server)', url: PROXY_CONFIGS['direct'], isEdge: false },
@@ -220,7 +180,6 @@ async function runGatekeeper(title = "Анализ связи", desc = "Выпо
         document.getElementById(`gk-node-${r.value}`).style.borderColor = 'var(--accent)';
     }));
 
-    // Пингуем узлы только в этот момент (нет фонового спама)
     const promises = nodes.map(n => measureGKping(n.key, n.url, n.isEdge).then(res => {
         const dot = document.getElementById(`gk-dot-${n.key}`);
         const pingText = document.getElementById(`gk-ping-${n.key}`);
@@ -240,7 +199,7 @@ async function runGatekeeper(title = "Анализ связи", desc = "Выпо
     if (directRes && directRes.status === 'red') {
         const availableEdges = results.filter(r => r.key !== 'direct' && r.status !== 'red').sort((a,b) => a.latency - b.latency);
         if (availableEdges.length > 0) bestProxy = availableEdges[0].key;
-        else bestProxy = 'cloudflare'; // Fallback
+        else bestProxy = 'cloudflare';
     }
 
     const targetRadio = document.querySelector(`input[name="gk_proxy"][value="${bestProxy}"]`);
@@ -256,11 +215,9 @@ async function runGatekeeper(title = "Анализ связи", desc = "Выпо
     btn.onclick = () => {
         const selected = document.querySelector('input[name="gk_proxy"]:checked').value;
         localStorage.setItem('ghost_db_proxy', selected);
-        modal.style.opacity = '0';
+        modal.style.display = 'none';
         
-        // 🔄 ЕДИНСТВЕННЫЙ ДОПУСТИМЫЙ РЕЛОАД (Только после ручного подтверждения)
-        // Это необходимо, чтобы на 100% очистить старые инстансы Firebase SDK и WebSocket пулы.
-        // Хэш (инвайт) при этом сохраняется в URL браузера!
-        setTimeout(() => window.location.reload(), 300);
+        // Надежная очистка состояния - перезагрузка (инвайт-хэш в URL не потеряется!)
+        window.location.reload(); 
     };
 }
