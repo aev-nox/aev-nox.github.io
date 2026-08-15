@@ -14,7 +14,6 @@ if (btnCloseProxy) {
 
 const PROXY_NAMES = {
     "direct": "Прямое подключение (Firebase Direct)",
-    "deno": "Deno Edge Proxy (wss/https)",
     "vercel": "Vercel Edge Proxy",
     "netlify": "Netlify Edge Proxy",
     "cloudflare": "Cloudflare Workers Edge Proxy"

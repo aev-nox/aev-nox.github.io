@@ -3,10 +3,10 @@ const RADAR_CONFIG = {
     frontends: [
         { name: "GitHub Pages", url: "https://aev-nox.github.io" },
         { name: "Vercel UI", url: "https://aev-nox.vercel.app" },
-        { name: "GitLab Pages", url: "https://aev-nox.gitlab.io" }
+        { name: "Google Pages", url: "https://aev-nox.web.app" }
     ],
     edges: [
-        { name: "Deno Edge", url: "https://edge-deno.aev-nox.deno.net" },
+        { name: "Google Direct", url: "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app", isDirectDB: true },
         { name: "Vercel Edge", url: "https://ed-ge-vercel.vercel.app" },
         { name: "Netlify Edge", url: "https://edge-netlify.netlify.app" },
         { name: "Cloudflare Edge", url: "https://edge-flare.zuq.workers.dev" }
@@ -44,10 +44,18 @@ function logTerminal(msg, type = 'info') {
 }
 
 // Замер пинга до конкретного узла
-async function measurePing(url, isEdge) {
+async function measurePing(url, isEdge, isDirectDB = false) {
     const start = performance.now();
     try {
-        const targetUrl = isEdge ? `${url}/ghost-ping` : url;
+        const baseUrl = url.split('?')[0].replace(/\/$/, '');
+        let targetUrl = url;
+        
+        if (isEdge) {
+            targetUrl = `${baseUrl}/ghost-ping`;
+        } else if (isDirectDB) {
+            targetUrl = `${baseUrl}/.json`;
+        }
+        
         const options = isEdge ? { cache: 'no-store' } : { mode: 'no-cors', cache: 'no-store' };
         
         const controller = new AbortController();
@@ -130,8 +138,9 @@ window.runSystemDiagnostics = async function() {
     });
 
     const checkEdges = RADAR_CONFIG.edges.map(async (node, i) => {
-        logTerminal(`Pinging Edge C2: ${node.name}...`);
-        const res = await measurePing(node.url, true);
+        logTerminal(`Pinging C2: ${node.name}...`);
+        // Передаем isDirectDB для правильного формирования пути
+        const res = await measurePing(node.url, node.isDirectDB ? false : true, node.isDirectDB);
         updateNodeUI(`edge-${i}`, res.status, res.latency);
         
         if (res.status !== 'red') {
@@ -139,7 +148,7 @@ window.runSystemDiagnostics = async function() {
             edgeSuccessCount++;
             logTerminal(`${node.name} [OK] - ${res.latency}ms`);
         } else {
-            logTerminal(`${node.name} [ОФФЛАЙН] - проверьте деплой воркера`, 'error');
+            logTerminal(`${node.name} [ОФФЛАЙН] - маршрут недоступен`, 'error');
         }
     });
 
@@ -149,10 +158,10 @@ window.runSystemDiagnostics = async function() {
         const avg = Math.round(totalEdgePing / edgeSuccessCount);
         avgDisplay.textContent = `Средний пинг (C2): ${avg} мс`;
         avgDisplay.style.color = avg < 300 ? '#22c55e' : (avg < 800 ? '#f59e0b' : '#ef4444');
-        logTerminal(`Диагностика завершена. Рабочих Edge-узлов: ${edgeSuccessCount}/${RADAR_CONFIG.edges.length}`, 'system');
+        logTerminal(`Диагностика завершена. Рабочих узлов: ${edgeSuccessCount}/${RADAR_CONFIG.edges.length}`, 'system');
     } else {
         avgDisplay.textContent = `CRITICAL: БАЗА НЕДОСТУПНА`;
         avgDisplay.style.color = '#ef4444';
-        logTerminal('ВНИМАНИЕ: Все Edge-прокси недоступны. Мессенджер не сможет отправлять и получать сообщения!', 'error');
+        logTerminal('ВНИМАНИЕ: Все маршруты недоступны. Мессенджер не сможет отправлять и получать сообщения!', 'error');
     }
 };

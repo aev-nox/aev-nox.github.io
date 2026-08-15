@@ -1,7 +1,6 @@
-// Конфигурации прокси-узлов
+// Конфигурации прокси-узлов (Canary Release Pattern)
 const PROXY_CONFIGS = {
     "direct": "https://global-student-project-default-rtdb.europe-west1.firebasedatabase.app",
-    "deno": "https://edge-deno.aev-nox.deno.net/?ns=global-student-project-default-rtdb",
     "vercel": "https://ed-ge-vercel.vercel.app/?ns=global-student-project-default-rtdb",
     "netlify": "https://edge-netlify.netlify.app/?ns=global-student-project-default-rtdb",
     "cloudflare": "https://edge-flare.zuq.workers.dev/?ns=global-student-project-default-rtdb"
@@ -25,6 +24,8 @@ function setupInterceptors(proxyOrigin) {
         if (reqUrl && reqUrl.includes('googleapis.com')) {
             const urlObj = new URL(reqUrl);
             const rewrittenUrl = proxyOrigin + urlObj.pathname + urlObj.search;
+            console.warn(`[C2 Intercept] Auth запрос завернут в прокси: -> ${rewrittenUrl}`);
+            
             if (typeof req === 'string') args[0] = rewrittenUrl;
             else args[0] = new Request(rewrittenUrl, req);
         }
@@ -36,13 +37,14 @@ function setupInterceptors(proxyOrigin) {
         if (typeof url === 'string' && url.includes('googleapis.com')) {
             const urlObj = new URL(url);
             url = proxyOrigin + urlObj.pathname + urlObj.search;
+            console.warn(`[C2 Intercept] XHR Auth завернут в прокси: -> ${url}`);
         }
         return originalOpen.call(this, method, url, ...rest);
     };
 }
 
 // ==========================================
-// 🔥 ГЛАВНЫЙ ЗАПУСК СИСТЕМЫ С ЖЕЛЕЗНЫМ ТАЙМЕРОМ
+// 🔥 ГЛАВНЫЙ ЗАПУСК СИСТЕМЫ (Lazy Init)
 // ==========================================
 async function startGhostCore(selectedProxy) {
     localStorage.setItem('ghost_db_proxy', selectedProxy);
@@ -51,8 +53,10 @@ async function startGhostCore(selectedProxy) {
 
     if (selectedProxy !== 'direct') {
         setupInterceptors(proxyOrigin);
-        console.warn(`[Ghost Proxy] Узел: ${selectedProxy}. HTTP Long Polling.`);
+        console.warn(`[Ghost Proxy] Узел: ${selectedProxy}. WebSockets отключены -> Активирован HTTP Long Polling.`);
         window.WebSocket = undefined; 
+    } else {
+        console.log("[Ghost Proxy] Прямое подключение. Режим WebSockets активен (Max Speed).");
     }
 
     if (!firebase.apps.length) {
@@ -88,8 +92,9 @@ async function startGhostCore(selectedProxy) {
         }
     });
 
-    // --- Дальше идут асинхронные запросы (они могут зависнуть, но таймер выше нас спасет) ---
-    window.auth.signInAnonymously().catch(error => console.error(error));
+    window.auth.signInAnonymously().catch(error => {
+        console.error("[-] Ошибка выдачи системного токена устройства:", error);
+    });
 
     window.isRealAdmin = async function(userHash) {
         if (!userHash) return false;
@@ -103,13 +108,23 @@ async function startGhostCore(selectedProxy) {
         await window.db.ref('admin_master_hash').set(defaultHash);
     }
 
-    // Загрузка остальных скриптов
-    const appScripts = ['js/status.js', 'js/proxy.js', 'js/chat.js', 'js/admin.js', 'js/router.js'];
+    // 🔥 ПАТЧ: Строгий порядок загрузки скриптов!
+    const appScripts = [
+        'js/status.js', 
+        'js/proxy.js', 
+        'js/chat.js',
+        'js/admin.js',
+        'js/router.js' 
+    ];
+    
     for (let src of appScripts) {
         await new Promise((resolve, reject) => {
             if (document.querySelector(`script[src="${src}"]`)) return resolve();
             const s = document.createElement('script');
-            s.src = src; s.async = false; s.onload = resolve; s.onerror = reject;
+            s.src = src;
+            s.async = false; 
+            s.onload = resolve;
+            s.onerror = reject;
             document.body.appendChild(s);
         });
     }
@@ -119,7 +134,7 @@ async function startGhostCore(selectedProxy) {
 // 🔥 ЛОГИКА GATEKEEPER (ПРИВРАТНИК)
 // ==========================================
 const savedProxy = localStorage.getItem('ghost_db_proxy');
-const isSafeMode = window.location.hash === '#/proxy'; // Ручной вызов окна
+const isSafeMode = window.location.hash === '#/proxy';
 
 if (savedProxy && !isSafeMode) {
     startGhostCore(savedProxy);
@@ -130,8 +145,9 @@ if (savedProxy && !isSafeMode) {
 async function measureGKping(key, urlString, isEdge) {
     const start = performance.now();
     try {
-        const baseUrl = urlString.split('?')[0].replace(/\/$/, ''); 
-        const targetUrl = isEdge ? `${baseUrl}/ghost-ping` : `${baseUrl}/.json`;
+        const baseUrl = urlString.split('?')[0].replace(/\/$/, ''); // Убираем слеш на конце
+        const targetUrl = isEdge ? `${baseUrl}/ghost-ping` : `${baseUrl}/.json`; // Директ стучится в .json
+        
         const options = isEdge ? { cache: 'no-store' } : { mode: 'no-cors', cache: 'no-store' };
         
         const controller = new AbortController();
@@ -142,6 +158,7 @@ async function measureGKping(key, urlString, isEdge) {
         
         const latency = Math.round(performance.now() - start);
         if (isEdge && !res.ok) throw new Error("HTTP Error");
+        
         return { key, status: latency < 400 ? 'green' : 'orange', latency };
     } catch (err) {
         return { key, status: 'red', latency: -1 };
@@ -155,12 +172,12 @@ async function runGatekeeper() {
     
     modal.style.display = 'flex';
 
+    // Убрали Deno
     const nodes = [
         { key: 'direct', name: 'Direct (Google Server)', url: PROXY_CONFIGS['direct'], isEdge: false },
         { key: 'cloudflare', name: 'Cloudflare Edge Proxy', url: PROXY_CONFIGS['cloudflare'], isEdge: true },
         { key: 'vercel', name: 'Vercel Edge Proxy', url: PROXY_CONFIGS['vercel'], isEdge: true },
-        { key: 'netlify', name: 'Netlify Edge Proxy', url: PROXY_CONFIGS['netlify'], isEdge: true },
-        { key: 'deno', name: 'Deno Edge Proxy', url: PROXY_CONFIGS['deno'], isEdge: true }
+        { key: 'netlify', name: 'Netlify Edge Proxy', url: PROXY_CONFIGS['netlify'], isEdge: true }
     ];
 
     list.innerHTML = nodes.map(n => `
@@ -198,8 +215,11 @@ async function runGatekeeper() {
     
     if (directRes && directRes.status === 'red') {
         const availableEdges = results.filter(r => r.key !== 'direct' && r.status !== 'red').sort((a,b) => a.latency - b.latency);
-        if (availableEdges.length > 0) bestProxy = availableEdges[0].key;
-        else bestProxy = 'cloudflare';
+        if (availableEdges.length > 0) {
+            bestProxy = availableEdges[0].key;
+        } else {
+            bestProxy = 'cloudflare';
+        }
     }
 
     const targetRadio = document.querySelector(`input[name="gk_proxy"][value="${bestProxy}"]`);
@@ -217,7 +237,6 @@ async function runGatekeeper() {
         localStorage.setItem('ghost_db_proxy', selected);
         modal.style.display = 'none';
         
-        // Надежная очистка состояния - перезагрузка (инвайт-хэш в URL не потеряется!)
         window.location.reload(); 
     };
 }
