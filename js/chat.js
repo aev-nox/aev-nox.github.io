@@ -91,6 +91,7 @@ async function initDashboard() {
 
     let myContactHashes = new Set();
     let allUsersData = {};
+    let isChatRestored = false; // 🔥 Флаг для одноразового авто-восстановления чата
 
     db.ref(`users/${mySession.u}/contacts`).on('value', (snap) => {
         myContactHashes.clear();
@@ -141,6 +142,16 @@ async function initDashboard() {
         });
         
         db.ref('presence').once('value').then(snap => updatePresenceUI(snap));
+
+        // 🔥 ПАТЧ: Авто-восстановление открытого чата после перезагрузки страницы (F5)
+        const savedHash = sessionStorage.getItem('active_chat_hash');
+        if (savedHash && !isChatRestored && myContactHashes.has(savedHash)) {
+            const data = allUsersData[savedHash];
+            if (data && data.n && !data.isBanned) {
+                isChatRestored = true; // Защита от зацикливания
+                openChat(savedHash, decodeBase64(data.n));
+            }
+        }
     }
 
     db.ref('presence').on('value', (snap) => updatePresenceUI(snap));
@@ -213,13 +224,16 @@ window.deleteContact = function(peerHash) {
     document.getElementById('modal-delete-contact').style.display = 'flex';
 };
 
-// 🔥 ПАТЧ ОТ БАГОВ: Жесткий контроль слушателей Firebase
+// Жесткий контроль слушателей Firebase
 let currentRoomId = null, currentRoomKey = null;
 let currentMessagesCallback = null;
 let currentTtlCallback = null;
 let currentMessagesValueCallback = null;
 
 async function openChat(peerHash, peerName) {
+    // 🔥 ПАТЧ: Запоминаем активный чат в сессию (для обхода обрыва фокуса при F5)
+    sessionStorage.setItem('active_chat_hash', peerHash);
+
     document.querySelector('.dashboard').classList.add('mobile-chat-active');
 
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
@@ -237,7 +251,7 @@ async function openChat(peerHash, peerName) {
     document.getElementById('crypto-badge').style.display = 'none';
     document.getElementById('chat-controls').style.display = 'none';
 
-    // 🔥 ПАТЧ: Отключаем только конкретные колбэки текущего чата, не ломая фоновые процессы!
+    // Отключаем только конкретные колбэки текущего чата
     if (currentRoomId) {
         if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
         if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
@@ -246,7 +260,7 @@ async function openChat(peerHash, peerName) {
 
     const hashes = [mySession.u, peerHash].sort();
     currentRoomId = await sha256(hashes[0] + "_" + hashes[1]);
-    currentRoomKey = null; // Сбрасываем ключ для нового чата
+    currentRoomKey = null;
 
     localStorage.setItem(`ghost_read_${currentRoomId}`, Date.now());
 
@@ -305,7 +319,6 @@ async function openChat(peerHash, peerName) {
             return;
         }
 
-        // 🔥 ПАТЧ: Ожидание ключа. Защита от гонки процессов на слабых телефонах!
         let attempts = 0;
         while (!currentRoomKey && attempts < 50 && currentRoomId === msgRoomId) {
             await new Promise(r => setTimeout(r, 50)); 
@@ -352,7 +365,10 @@ const backBtn = document.getElementById('btn-mobile-back');
 if (backBtn) {
     backBtn.addEventListener('click', () => {
         document.querySelector('.dashboard').classList.remove('mobile-chat-active');
-        // 🔥 ПАТЧ: Аккуратно отключаем слушатели при выходе из чата
+        
+        // 🔥 ПАТЧ: Очищаем сессию, так как пользователь добровольно закрыл чат
+        sessionStorage.removeItem('active_chat_hash');
+
         if (currentRoomId) {
             if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
             if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
@@ -374,7 +390,6 @@ document.getElementById('auto-clean-select').addEventListener('change', async (e
     await db.ref(`rooms/${currentRoomId}/ttl`).set(val);
 });
 
-// 🔥 ПАТЧ: Новая логика корзины (модальное окно вместо встроенного confirm)
 document.getElementById('btn-clear-chat').addEventListener('click', () => {
     if (!currentRoomId) return;
     document.getElementById('cb-confirm-clear').checked = false;
@@ -465,7 +480,9 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
     if ((shouldDeleteContact || shouldClearChat) && currentRoomId === targetRoomId) {
         document.querySelector('.dashboard').classList.remove('mobile-chat-active');
         
-        // 🔥 ПАТЧ: Аккуратное отключение и тут тоже
+        // 🔥 ПАТЧ: Очищаем сессию при удалении активного чата
+        sessionStorage.removeItem('active_chat_hash');
+        
         if (currentMessagesCallback) db.ref(`rooms/${currentRoomId}/messages`).off('child_added', currentMessagesCallback);
         if (currentMessagesValueCallback) db.ref(`rooms/${currentRoomId}/messages`).off('value', currentMessagesValueCallback);
         if (currentTtlCallback) db.ref(`rooms/${currentRoomId}/ttl`).off('value', currentTtlCallback);
