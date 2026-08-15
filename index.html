@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>404 Not Found</title>
+    <title>Ghost Core</title>
 
     <script>
         if (window.location.hash.length > 2) {
@@ -11,14 +11,36 @@
         }
     </script>
 
-    <!-- 🔥 ИЗМЕНЕНИЯ ЗДЕСЬ: Теперь скрипты грузятся локально (Полная автономность) -->
     <script src="js/lib/firebase-app-compat.js"></script>
     <script src="js/lib/firebase-auth-compat.js"></script>
     <script src="js/lib/firebase-database-compat.js"></script>
-    
     <link rel="stylesheet" href="style.css">
+
+    <style>
+        /* CSS для экрана загрузки (Splash Screen) */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #splash-screen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100%; height: 100dvh;
+            background: var(--bg-main, #0f172a); z-index: 9998;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 0.3s ease-out;
+        }
+        .splash-spinner {
+            width: 45px; height: 45px;
+            border: 4px solid rgba(99, 102, 241, 0.15);
+            border-top-color: #6366f1; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 25px;
+        }
+    </style>
 </head>
 <body>
+
+    <!-- 🔥 НОВЫЙ БЛОК: Splash Screen (Убивает белый экран) -->
+    <div id="splash-screen">
+        <div class="splash-spinner"></div>
+        <div id="splash-text" style="color: #f8fafc; font-weight: bold; font-size: 1.1em; letter-spacing: 0.5px;">Установка E2E соединения...</div>
+        <div style="color: #64748b; font-size: 0.85em; margin-top: 12px; font-family: monospace;">Zero Trust Network</div>
+    </div>
 
     <div id="view-404" class="view active" style="background-color: #fff; color: #000; text-align: center; font-family: Arial, sans-serif; padding-top: 50px;">
         <h1 style="font-size: 30px; font-weight: bold; margin-bottom: 10px;">404 Not Found</h1>
@@ -45,7 +67,7 @@
             
             <div id="auth-checkbox-container" style="display: none; align-items: flex-start; gap: 8px; margin-top: 5px; margin-bottom: 10px; text-align: left;">
                 <input type="checkbox" id="reg-checkbox" style="margin-top: 3px; cursor: pointer;">
-                <label for="reg-checkbox" style="font-size: 0.85em; color: #cbd5e1; line-height: 1.3; cursor: pointer; user-select: none;">Я внимательно прочитал то что написано выше, я сохраню ссылку и пароль, в надежном месте.</label>
+                <label for="reg-checkbox" style="font-size: 0.85em; color: #cbd5e1; line-height: 1.3; cursor: pointer; user-select: none;">Я внимательно прочитал то что написано выше, я сохраню ссылку и пароль.</label>
             </div>
 
             <button id="btn-register">Войти</button>
@@ -107,114 +129,15 @@
         </div>
     </div>
 
-    <div id="view-proxy-test" class="view" style="overflow-y: auto;">
-        <div class="admin-header">
-            <h2 style="color: #8b5cf6;">🔀 DB Proxy Tester</h2>
-            <button class="btn-sm" id="btn-close-proxy" style="background: var(--bg-hover);">Вернуться в чат</button>
-        </div>
-        <div class="admin-content" style="max-width: 600px; margin: 0 auto;">
-            <div class="admin-card">
-                <h3 style="margin-top: 0; color: #8b5cf6;">Выбор маршрута к базе данных</h3>
-                <p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">
-                    Выберите узел для тестирования C2 соединения. При смене маршрута приложение будет перезагружено для поднятия новых WebSocket.
-                </p>
-                <div id="proxy-list-container" style="display: flex; flex-direction: column; gap: 10px;">
-                    </div>
-                <button id="btn-apply-proxy" style="margin-top: 25px; width: 100%; padding: 12px; background: #8b5cf6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: opacity 0.2s;">Применить и Перезагрузить</button>
-            </div>
-            
-            <div style="margin-top: 20px; padding: 15px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 0.85em; color: #fcd34d; line-height: 1.5;">
-                ⚠️ <strong>Режим Canary:</strong> Если после переключения вы видите ошибки коннекта, база не грузится или сообщения не доходят, вернитесь сюда и выберите базовый маршрут "Direct".
-            </div>
-        </div>
-    </div>
-
-    <div id="view-admin" class="view">
-        <div class="admin-header">
-            <h2>⚙️ Панель Управления (Zero Trust C2)</h2>
-            <button class="btn-sm" id="btn-close-admin" style="background:#6366f1;">Вернуться в чат</button>
-        </div>
-        <div class="admin-content">
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Пользователь</th>
-                        <th>Статус</th>
-                        <th>Последний вход</th>
-                        <th>Управление</th>
-                    </tr>
-                </thead>
-                <tbody id="admin-users-list"></tbody>
-            </table>
-
-            <div class="admin-card">
-                <h3>Создать новый инвайт</h3>
-                <p style="color:#94a3b8; font-size: 0.9em; margin-bottom: 10px;">Генерирует ссылку доступа для нового пользователя.</p>
-                <button class="btn-sm" id="btn-generate-invite" style="background: #6366f1; padding: 10px 20px;">+ Сгенерировать доступ</button>
-                <div class="invite-links" id="invite-links-display" style="display:none;"></div>
-            </div>
-
-            <div class="admin-card">
-                <h3>🔑 Управление Мастер-Ссылкой Админа</h3>
-                <div class="flex-row">
-                    <input type="text" id="master-key-input" placeholder="Новый токен (например: MY-SECRET-KEY-777)">
-                    <button class="btn-sm" id="btn-change-master-key" style="background:#f59e0b; color:#000; font-weight:bold;">Обновить</button>
-                </div>
-                <div id="master-key-status" style="margin-top: 10px; font-size: 0.9em;"></div>
-            </div>
-        </div>
-    </div>
-
-    <div id="view-status" class="view" style="overflow-y: auto;">
-        <div class="admin-header">
-            <h2>📊 Ghost Radar (Состояние системы)</h2>
-            <button class="btn-sm" id="btn-close-status" style="background:#6366f1;">Вернуться в чат</button>
-        </div>
-        <div class="admin-content" style="max-width: 1000px;">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">
-                
-                <div class="admin-card">
-                    <h3 style="margin-top: 0; color: var(--text-secondary); font-size: 1.1em;">🌐 Фронтенд узлы (UI)</h3>
-                    <div id="frontend-nodes-list" style="display: flex; flex-direction: column; gap: 10px;">
-                        </div>
-                </div>
-
-                <div class="admin-card">
-                    <h3 style="margin-top: 0; color: var(--text-secondary); font-size: 1.1em;">⚡ Базы данных (Edge C2)</h3>
-                    <div id="edge-nodes-list" style="display: flex; flex-direction: column; gap: 10px;">
-                        </div>
-                </div>
-            </div>
-
-            <div class="admin-card" style="background: #0a0a0a; border-color: #333;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <h3 style="margin: 0; font-size: 1.1em; color: var(--text-secondary);">💻 System Logs</h3>
-                    <span id="avg-ping-display" style="font-size: 0.9em; font-weight: bold; background: var(--bg-hover); padding: 4px 10px; border-radius: 6px;">Средний пинг: -- мс</span>
-                </div>
-                <div id="status-terminal" style="font-family: monospace; font-size: 0.85em; color: #22c55e; height: 250px; overflow-y: auto; padding: 12px; background: #000; border-radius: 6px; border: 1px solid #1f2937;">
-                    </div>
-            </div>
-        </div>
-    </div>
-
+    <!-- Модалки удаления/очистки -->
     <div id="modal-delete-contact" class="modal-overlay" style="display: none;">
         <div class="modal-box">
             <h3 style="margin-top: 0; color: #f87171; font-size: 1.2em;">Удаление чата</h3>
-            <p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">Вы собираетесь удалить этот чат. Выберите действия, которые необходимо выполнить:</p>
-            
-            <label class="custom-checkbox">
-                <input type="checkbox" id="cb-delete-contact" checked>
-                <span>Удалить пользователя из списка контактов</span>
-            </label>
-            
-            <label class="custom-checkbox">
-                <input type="checkbox" id="cb-clear-chat" checked>
-                <span style="color: #fca5a5;">Безвозвратно очистить переписку у обоих участников</span>
-            </label>
-            
+            <label class="custom-checkbox"><input type="checkbox" id="cb-delete-contact" checked><span>Удалить пользователя из списка контактов</span></label>
+            <label class="custom-checkbox"><input type="checkbox" id="cb-clear-chat" checked><span style="color: #fca5a5;">Безвозвратно очистить переписку</span></label>
             <div style="display: flex; gap: 10px; margin-top: 25px; justify-content: flex-end;">
                 <button id="btn-cancel-delete" class="btn-sm" style="background: var(--bg-hover); padding: 8px 16px;">Отмена</button>
-                <button id="btn-confirm-delete" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px; font-weight: bold;">Выполнить</button>
+                <button id="btn-confirm-delete" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px;">Выполнить</button>
             </div>
         </div>
     </div>
@@ -222,31 +145,23 @@
     <div id="modal-clear-chat" class="modal-overlay" style="display: none;">
         <div class="modal-box">
             <h3 style="margin-top: 0; color: #f87171; font-size: 1.2em;">Очистка переписки</h3>
-            <p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">
-                Вы уверены, что хотите полностью очистить историю сообщений с данным пользователем? 
-            </p>
-            
-            <label class="custom-checkbox">
-                <input type="checkbox" id="cb-confirm-clear">
-                <span style="color: #fca5a5;">Да, я подтверждаю очистку переписки у обоих участников данного чата, без возможности восстановления!</span>
-            </label>
-            
+            <label class="custom-checkbox"><input type="checkbox" id="cb-confirm-clear"><span style="color: #fca5a5;">Да, очистить без восстановления!</span></label>
             <div style="display: flex; gap: 10px; margin-top: 25px; justify-content: flex-end;">
                 <button id="btn-cancel-clear" class="btn-sm" style="background: var(--bg-hover); padding: 8px 16px;">Отмена</button>
-                <button id="btn-confirm-clear" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px; font-weight: bold;">Выполнить</button>
+                <button id="btn-confirm-clear" class="btn-sm" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 8px 16px;">Выполнить</button>
             </div>
         </div>
     </div>
 
-    <!-- 🔥 НОВЫЙ БЛОК: Окно Привратника (Gatekeeper) -->
-    <div id="gatekeeper-modal" class="modal-overlay" style="display: none; z-index: 9999; backdrop-filter: blur(5px); transition: opacity 0.3s;">
+    <!-- 🔥 ОБНОВЛЕННЫЙ БЛОК: Окно Привратника (Gatekeeper) -->
+    <div id="gatekeeper-modal" class="modal-overlay" style="display: none; z-index: 9999; backdrop-filter: blur(5px);">
         <div class="modal-box" style="max-width: 450px;">
-            <h2 style="margin-top: 0; color: var(--accent); text-align: center;">Анализ связи</h2>
-            <p style="font-size: 0.85em; color: var(--text-secondary); text-align: center; margin-bottom: 20px;">
+            <h2 id="gk-modal-title" style="margin-top: 0; color: var(--accent); text-align: center;">Анализ связи</h2>
+            <p id="gk-modal-desc" style="font-size: 0.85em; color: var(--text-secondary); text-align: center; margin-bottom: 20px;">
                 Выполняется поиск доступного узла для подключения к базе данных...
             </p>
             <div id="gk-nodes-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
-                <!-- Динамически заполняется через JS -->
+                <!-- Динамически заполняется -->
             </div>
             <button id="btn-gk-confirm" style="width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; opacity: 0.5; pointer-events: none; transition: background 0.2s;">
                 Подтвердить маршрут
@@ -254,7 +169,21 @@
         </div>
     </div>
 
-    <!-- Загружаем только крипту и конфигуратор, остальное загрузит Gatekeeper! -->
+    <!-- Остальные админ/статус View -->
+    <div id="view-proxy-test" class="view" style="overflow-y: auto;">
+        <div class="admin-header"><h2 style="color: #8b5cf6;">🔀 DB Proxy Tester</h2><button class="btn-sm" id="btn-close-proxy" style="background: var(--bg-hover);">В чат</button></div>
+        <div class="admin-content" style="max-width: 600px; margin: 0 auto;">
+            <div class="admin-card">
+                <div id="proxy-list-container" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                <button id="btn-apply-proxy" style="margin-top: 25px; width: 100%; padding: 12px; background: #8b5cf6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Применить и Перезагрузить</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="view-admin" class="view"><div class="admin-header"><h2>⚙️ Панель Управления</h2><button class="btn-sm" id="btn-close-admin" style="background:#6366f1;">В чат</button></div><div class="admin-content"><table class="admin-table"><thead><tr><th>Пользователь</th><th>Статус</th><th>Последний вход</th><th>Управление</th></tr></thead><tbody id="admin-users-list"></tbody></table></div></div>
+    
+    <div id="view-status" class="view"><div class="admin-header"><h2>📊 Ghost Radar</h2><button class="btn-sm" id="btn-close-status" style="background:#6366f1;">В чат</button></div><div class="admin-content" style="max-width: 1000px;"><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;"><div class="admin-card"><h3 style="margin-top: 0; color: var(--text-secondary); font-size: 1.1em;">🌐 Фронтенд узлы (UI)</h3><div id="frontend-nodes-list" style="display: flex; flex-direction: column; gap: 10px;"></div></div><div class="admin-card"><h3 style="margin-top: 0; color: var(--text-secondary); font-size: 1.1em;">⚡ Базы данных (Edge C2)</h3><div id="edge-nodes-list" style="display: flex; flex-direction: column; gap: 10px;"></div></div></div><div class="admin-card" style="background: #0a0a0a; border-color: #333;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"><h3 style="margin: 0; font-size: 1.1em; color: var(--text-secondary);">💻 System Logs</h3><span id="avg-ping-display" style="font-size: 0.9em; font-weight: bold; background: var(--bg-hover); padding: 4px 10px; border-radius: 6px;">Средний пинг: -- мс</span></div><div id="status-terminal" style="font-family: monospace; font-size: 0.85em; color: #22c55e; height: 250px; overflow-y: auto; padding: 12px; background: #000; border-radius: 6px; border: 1px solid #1f2937;"></div></div></div></div>
+
     <script src="js/crypto.js"></script>
     <script src="js/config.js"></script>
 </body>
